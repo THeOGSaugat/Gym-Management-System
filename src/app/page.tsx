@@ -1,8 +1,11 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { SiteHeader } from "@/components/layout/site-header";
+import { getCurrentUser } from "@/lib/auth/session";
 
-export default function Home() {
+export default async function Home() {
+  const user = await getCurrentUser();
+
   return (
     <div className="flex flex-1 flex-col">
       <SiteHeader />
@@ -18,7 +21,13 @@ export default function Home() {
           <Button
             size="lg"
             nativeButton={false}
-            render={<Link href="/login">Log in</Link>}
+            render={
+              user ? (
+                <Link href="/dashboard">Go to dashboard</Link>
+              ) : (
+                <Link href="/login">Log in</Link>
+              )
+            }
           />
         </div>
       </main>

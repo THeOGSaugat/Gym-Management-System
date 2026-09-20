@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { getCurrentUser } from "@/lib/auth/session";
 import { SiteHeader } from "@/components/layout/site-header";
 import {
   Card,
@@ -7,20 +9,17 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
+import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = {
   title: "Log in",
 };
 
-/**
- * Placeholder login screen — layout and design only.
- * Real authentication (Auth.js, session handling, role-based redirects)
- * is built in Phase 1. The form below is not wired up yet.
- */
-export default function LoginPage() {
+export default async function LoginPage() {
+  // Already signed in? Don't show the login form — send them straight in.
+  const user = await getCurrentUser();
+  if (user) redirect("/dashboard");
+
   return (
     <div className="flex flex-1 flex-col">
       <SiteHeader />
@@ -29,38 +28,11 @@ export default function LoginPage() {
           <CardHeader>
             <CardTitle>Log in</CardTitle>
             <CardDescription>
-              Authentication is not implemented yet — this is a design
-              placeholder for Phase 1.
+              Enter your email and password to continue.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form className="flex flex-col gap-4">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  placeholder="you@example.com"
-                  disabled
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  placeholder="••••••••"
-                  disabled
-                />
-              </div>
-              <Button type="submit" className="mt-2 w-full" disabled>
-                Log in (coming in Phase 1)
-              </Button>
-            </form>
+            <LoginForm />
           </CardContent>
         </Card>
       </main>
