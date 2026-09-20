@@ -15,7 +15,11 @@ export default function Home() {
             Members, trainers, memberships, payments and attendance — all in a
             single system. This project is under active development.
           </p>
-          <Button size="lg" render={<Link href="/login">Log in</Link>} />
+          <Button
+            size="lg"
+            nativeButton={false}
+            render={<Link href="/login">Log in</Link>}
+          />
         </div>
       </main>
     </div>
