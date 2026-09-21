@@ -21,8 +21,13 @@ This repository is being built in phases.
   one-open-session enforced at both the service layer and a database
   constraint, admin "today" and searchable/date-filtered history views,
   and a QR-ready service design (no QR UI yet — see below).
-- Trainer management, workout plans, dashboards, notifications: not
-  built yet.
+- **Phase 5 (trainer management & assignment)** — done: admin CRUD over
+  trainer accounts, assigning/changing/removing a member's trainer, and a
+  trainer portal scoped strictly to a trainer's own assigned members
+  (reduced profile, attendance, membership status — no payments, no other
+  members) via a new, additive read layer that leaves Phases 2–4's
+  services untouched.
+- Workout plans, dashboards, notifications: not built yet.
 
 ## Stack
 
@@ -71,7 +76,8 @@ production.
 ```bash
 npx prisma generate      # generates the typed client into src/generated/prisma
 npx prisma migrate dev   # creates/updates tables in Neon (users, member_profiles,
-                          # membership_plans, memberships, payments, attendance, ...)
+                          # membership_plans, memberships, payments, attendance,
+                          # trainer_profiles, trainer_assignments, ...)
 npm run db:seed          # creates test users, member fixtures, plans, a sample
                           # membership + payment — see below
 ```
@@ -96,6 +102,10 @@ Open [http://localhost:3000](http://localhost:3000).
 | `/trainer/dashboard` | TRAINER only |
 | `/member/dashboard` | MEMBER only |
 | `/member/profile` | MEMBER only — view/edit **own** profile, nobody else's |
+| `/admin/trainers` | ADMIN only — trainer list, search, filter, pagination |
+| `/admin/trainers/new`, `/admin/trainers/[id]` | ADMIN only — create/edit/(de)activate a trainer; roster |
+| `/trainer/members` | TRAINER only — **own** assigned-members roster, nobody else's |
+| `/trainer/members/[id]` | TRAINER only — an **assigned** member's reduced profile, attendance, membership status (no payments) |
 | `/admin/plans` | ADMIN only — membership plan catalog |
 | `/admin/plans/new`, `/admin/plans/[id]` | ADMIN only — create/edit/(de)activate a plan |
 | `/admin/members/[id]/memberships/new` | ADMIN only — assign a membership to that member |
@@ -126,17 +136,23 @@ rows to actually exercise search, filtering, and pagination (page size is
 20). One of them (`tomas.alves@gym.test`) is seeded as `SUSPENDED` to test
 the status filter.
 
+...and 2 additional TRAINER fixtures (password `Member123!`):
+`deepak.kapoor@gym.test` (Strength & conditioning) and
+`hannah.weiss@gym.test` (Yoga & mobility, deliberately left with zero
+assigned members, to exercise that empty state without extra setup).
+
 ⚠️ Dev-only. There is no self-serve registration — a real gym's admin
-creates member accounts through `/admin/members/new` (ADMIN/TRAINER
-accounts still need the seed script, or a future admin UI). Never run the
-seed script against a production database, and never reuse these
+creates member and trainer accounts through `/admin/members/new` and
+`/admin/trainers/new` (ADMIN accounts still need the seed script). Never
+run the seed script against a production database, and never reuse these
 passwords anywhere real.
 
 The seed script also creates three membership plans (**Monthly** $49.99/
-30 days, **Quarterly** $129.99/90 days, **Annual** $449.99/365 days) and
+30 days, **Quarterly** $129.99/90 days, **Annual** $449.99/365 days),
 gives `member@gym.test` an active Monthly membership with a matching cash
-payment, so the membership/payment screens have something to look at
-immediately.
+payment, and assigns `member@gym.test` to Deepak Kapoor plus two of the
+extra members to `trainer@gym.test` — so the membership/payment/trainer-
+portal screens all have something to look at immediately.
 
 ## 6. Manually test the auth flow
 
@@ -249,7 +265,69 @@ immediately.
    ever targets your own session), and it's rejected server-side even if
    called directly (see the service tests).
 
-## 10. Run the test suite
+## 10. Manually test trainer management & assignment
+
+1. Log in as `admin@gym.test` → `/admin/trainers`. You should see Tara
+   Trainer, Deepak Kapoor, and Hannah Weiss, all Active.
+2. Create a new trainer → it appears in the list and its own detail page.
+   Try the same email again → "An account with this email already
+   exists," not a raw error.
+3. Open `deepak.kapoor@gym.test`'s trainer detail page → "Assigned
+   members" shows `member@gym.test`. Open Hannah Weiss's → "No members
+   currently assigned" (the empty state).
+4. Open `member@gym.test`'s member detail page (`/admin/members/[id]`) →
+   the "Trainer" section shows "Currently assigned to Deepak Kapoor."
+   Use the dropdown to pick a different trainer and click **Change
+   trainer** → updates immediately, and Deepak's roster on his own
+   detail page no longer includes this member, while the new trainer's
+   does.
+5. Click **Remove** on a member's Trainer section → "No trainer
+   assigned." Assign a trainer again → works as a fresh assignment (not
+   a "change," since there's nothing to close first).
+6. Deactivate a trainer who has assigned members (**Deactivate** on
+   their detail page) → their status flips to Suspended, and every
+   member who was assigned to them shows "No trainer assigned" —
+   deactivating auto-ends their assignments in one transaction. Try
+   logging in as that (now-suspended) trainer → fails, same
+   `authorize()` check Phase 1 built for members.
+7. Log in as `trainer@gym.test` → `/trainer/members` shows only the
+   members currently assigned to *this* trainer (two of the seeded
+   extras). Click into one → you see their name, email, phone, current
+   membership status, and recent attendance — but **no** address, date
+   of birth, or emergency contact (deliberately excluded — see "How
+   trainer management works" below).
+8. While signed in as that trainer, try loading
+   `/trainer/members/<member@gym.test's id>` directly (a member assigned
+   to a *different* trainer) → you're correctly blocked from seeing
+   their data (verify via the service tests or by inspecting the
+   response for the member's name — it never appears; see the note below
+   about testing this with curl vs. a real browser).
+9. As that trainer, try `/admin/members`, `/admin/payments`,
+   `/admin/trainers`, or another trainer's roster page directly → all
+   `/forbidden`. Trainers get no member-management, no financial access,
+   and no cross-trainer visibility.
+10. Log in as a member → confirm `/admin/trainers` and `/trainer/members`
+    are both `/forbidden`, and their own `/member/profile`,
+    `/member/membership`, `/member/payments` still show only their own
+    data (the Phase 2–4 regression check).
+
+> **A testing note, not a bug**: verifying step 8 with `curl` can be
+> misleading. When a Server Component's `redirect()` fires *after* its
+> parent layout has already started streaming its response (as happens
+> here — `trainer/layout.tsx` renders the header before the page's
+> assignment check runs), Next.js can't retroactively send an HTTP 3xx
+> anymore, so it embeds a client-side redirect instruction in the
+> response instead — which only a real browser's JavaScript executes.
+> `curl` (or any non-JS client) sees a `200` with no protected data and
+> an embedded `NEXT_REDIRECT` instruction it can't follow, which can look
+> like a failure if you're only checking the HTTP status code. What
+> actually matters — confirmed while building this phase — is that no
+> protected data is ever present in that response either way, and a real
+> browser (or the service-layer tests, which don't go through HTTP at
+> all) shows the block working correctly. See "How trainer management
+> works" below.
+
+## 11. Run the test suite
 
 ```bash
 npm run test
@@ -257,13 +335,15 @@ npm run test
 
 Runs Vitest against the service layer (`member.service.ts`,
 `plan.service.ts`, `membership.service.ts`, `payment.service.ts`,
-`attendance.service.ts`), the pure date/status logic (`lib/membership.ts`,
-`lib/date.ts`), the authorization policies (`policies.ts`), and the Zod
-validation schemas — 167 tests, using a mocked Prisma client, no database
-connection needed. See "How attendance works" and "How plans, memberships
-& payments work" below for what these tests do and don't cover.
+`attendance.service.ts`, `trainer.service.ts`, `assignment.service.ts`,
+`trainer-portal.service.ts`), the pure date/status logic
+(`lib/membership.ts`, `lib/date.ts`), the authorization policies
+(`policies.ts`), and every Zod validation schema — 243 tests, using a
+mocked Prisma client, no database connection needed. See "How trainer
+management works," "How attendance works," and "How plans, memberships &
+payments work" below for what these tests do and don't cover.
 
-## 11. Production build
+## 12. Production build
 
 ```bash
 npm run build
@@ -480,6 +560,78 @@ build, and fails loudly on type errors since TypeScript strict mode is on.
   already accepts any `actor` + target `memberId`, it just isn't wired
   to a UI for that today.
 
+## How trainer management works
+
+- **"Active status" for a trainer reuses `User.status`** (`ACTIVE`/
+  `SUSPENDED`), not a second flag on `TrainerProfile` — the exact same
+  activate/deactivate mechanism Phase 2 built for members. Name and
+  phone likewise stay on `User`, not duplicated onto the profile table;
+  `TrainerProfile` only holds what's genuinely trainer-specific (bio,
+  specialization, years of experience).
+- **Assignment is a time-bounded relationship, not a foreign key on
+  either `User`.** Ending an assignment (removing it, or replacing it
+  with a different trainer) never deletes the row — it closes it
+  (`status: ENDED`, `endDate` set) — so "who trained this member, and
+  when" survives. `assignMemberToTrainer` is the *only* write function
+  for this relationship: called with no prior assignment, it's a fresh
+  assign; called while one already exists, it closes the old row and
+  opens a new one in the same transaction. "Assign" and "change trainer"
+  are the same operation from the data model's point of view — there's
+  no separate `changeTrainer` function to keep in sync with it.
+  `removeAssignment` is the one genuinely different operation: close
+  with no replacement.
+- **At most one ACTIVE assignment per member**, enforced the same way as
+  Phase 4's "at most one open attendance session": a service-layer
+  pre-check for a clean error message, plus a hand-written partial
+  unique index (`CREATE UNIQUE INDEX ... WHERE status = 'ACTIVE'`) as
+  defense-in-depth against a race between two concurrent assign
+  requests — Prisma's schema DSL still has no declarative syntax for a
+  partial unique index, so this is hand-added to the migration's SQL,
+  same as before.
+- **Deactivating a trainer auto-ends their active assignments**, in the
+  same database transaction as the status change. A suspended trainer
+  who can't log in shouldn't keep an "active" client roster — that would
+  be a dangling, confusing state (a member's page would claim they have
+  a trainer who can never respond). Reactivating does *not* restore
+  those assignments; an admin reassigns explicitly.
+- **The trainer portal is new, additive code — not changes to Phases
+  2–4.** Rather than teaching `member.service.ts` / `attendance.service.ts`
+  / `membership.service.ts` a new "trainer of an assigned member" access
+  path, `trainer-portal.service.ts` is a separate service that
+  independently checks the assignment and reads the data directly. This
+  was a deliberate choice matching the instruction to build trainer
+  management "without breaking existing functionality": every function
+  those three services exported before Phase 5 behaves identically after
+  it, verified by their existing test suites still passing unmodified.
+- **The trainer portal's member view is deliberately reduced.** It
+  returns name, email, phone, member number, and join date — never date
+  of birth, address, or emergency contact. Those fields have an
+  admin-and-the-member-themself access boundary throughout this codebase
+  (see `member.service.ts`) and Phase 5 doesn't relax that for trainers,
+  even for their own assigned members, since nothing in the requirements
+  asked for it and it's meaningfully more sensitive data than a coaching
+  relationship needs.
+- **No payment access for trainers, anywhere, full stop.** There is no
+  function in this codebase — not in `trainer-portal.service.ts`, not
+  anywhere — that lets a `TRAINER` actor read a `Payment` row for any
+  member, assigned or not. `canViewFinancialRecordsFor` (which gates all
+  payment access) was not modified in Phase 5 and never will be for this
+  purpose; a trainer's membership-*status* visibility is a completely
+  separate, narrower check that only ever reads plan name and dates, not
+  price. This is tested directly (`trainer-portal.service.test.ts`
+  asserts `listPaymentsForMember` rejects a `TRAINER` actor) as a
+  regression guard, not just described in this paragraph.
+- **`canTrainerAccessMember` is the one policy function in
+  `lib/auth/policies.ts` that isn't pure ID comparison.** "Is this
+  member currently assigned to this trainer" requires a database lookup,
+  which would break every other function in that file being a
+  framework-free pure function testable with plain objects. The lookup
+  itself lives in `trainer-portal.service.ts` (which fetches the
+  assignment); only the already-known boolean answer is passed into the
+  policy function. This is the smallest change that could preserve
+  "policies.ts has zero framework/DB dependencies" while still letting
+  one rule genuinely depend on data.
+
 ## Known simplifications (intentional, for a learning project)
 
 - **No self-serve registration.** Only the seed script creates users right
@@ -556,6 +708,22 @@ build, and fails loudly on type errors since TypeScript strict mode is on.
   in the UI won't match the front desk's wall clock. A per-gym timezone
   setting would fix this without changing the attendance logic itself —
   just what `now` gets normalized against.
+- **No member-facing "my trainer" page.** A member currently has no way
+  to see who their own assigned trainer is from `/member/*` — only the
+  admin and the trainer themself can see the assignment. Nothing in
+  Phase 5's requirements asked for a member-facing view; adding one
+  later would need a new, narrow policy check (a member reading their
+  own `TrainerAssignment` row), not a change to any existing one.
+- **No admin-assisted or front-desk trainer changes beyond the admin
+  UI** — there's no bulk-reassign tool (e.g. "move all of this
+  deactivated trainer's members to a new trainer at once"); each
+  reassignment is one member at a time via that member's detail page.
+- **A trainer's reduced member view has no edit capability at all** —
+  it's read-only by design (view assigned members' info, attendance,
+  membership status), matching the requirement that a trainer's access
+  be scoped narrowly. There's no trainer-initiated check-in/out or
+  membership action either, even for an assigned member — those remain
+  member-self-service (attendance) or admin-only (memberships/payments).
 
 ## Project structure
 
@@ -566,7 +734,8 @@ src/
     admin/             layout.tsx (requireRole ADMIN) + dashboard/
       members/           list (search/filter/paginate), actions.ts
         new/                create-member page
-        [id]/                member detail: profile, memberships, payments
+        [id]/                member detail: profile, trainer, memberships, payments
+          assignment/           actions.ts (assign/change/remove trainer)
           memberships/         actions.ts (assign/renew/cancel)
             new/                    assign-membership page
             [membershipId]/         membership detail: renew, cancel, its payments
@@ -577,7 +746,11 @@ src/
       payments/           global list (search/filter/paginate) + [id] detail
       attendance/         today's attendance
         history/            search + date-range filter, paginated
+      trainers/           list, actions.ts (create/edit/activate/deactivate)
+        new/, [id]/           create / detail+edit+toggle+assigned-members roster
     trainer/            layout.tsx (requireRole TRAINER) + dashboard/
+      members/             own assigned-members roster (canViewTrainerRoster: self only)
+        [id]/                  an assigned member's reduced profile/attendance/membership
     member/              layout.tsx (requireRole MEMBER) + dashboard/
       profile/             self-service profile: view/edit own data only
       membership/           own current status + history, nobody else's
@@ -596,6 +769,7 @@ src/
     memberships/       AssignMembershipForm, CancelMembershipForm
     payments/          RecordPaymentForm
     attendance/        CheckInOutButton
+    trainers/          TrainerForm (admin create/edit), AssignTrainerForm
   server/
     db.ts              Prisma client singleton
     prisma-errors.ts   isUniqueConstraintError() helper
@@ -605,13 +779,23 @@ src/
       membership.service.ts    Assign/renew/cancel/sweep + authorization
       payment.service.ts        Record/list/view + authorization
       attendance.service.ts      Check in/out, today's status, history + authorization
+      trainer.service.ts          Trainer roster CRUD + authorization
+      assignment.service.ts        Assign/change/remove trainer <-> member + authorization
+      trainer-portal.service.ts     New, additive: trainer's reduced read access to an
+                                    *assigned* member (profile/attendance/membership
+                                    status, never payments) — see "How trainer
+                                    management works"
   lib/
     auth/              config.ts (edge-safe) / auth.ts (Node, full config)
                        / session.ts (requireUser, requireRole)
                        / policies.ts (canManageMembers, canManageFinancialRecords,
-                                      canRecordAttendanceFor, ...)
+                                      canRecordAttendanceFor, canManageTrainers,
+                                      canTrainerAccessMember, ...)
                        / password.ts / actions.ts (logout)
-    validations/       Zod schemas (auth.ts, member.ts, plan.ts, membership.ts, payment.ts)
+    validations/       Zod schemas (auth.ts, member.ts, plan.ts, membership.ts,
+                       payment.ts, trainer.ts, assignment.ts) + shared.ts (the one
+                       place the FormData-null-vs-empty-string normalization lives —
+                       see "Notes on dependency versions" for why that matters)
     service-error.ts    maps thrown domain errors -> notFound()/redirect()
     rate-limit.ts       in-memory login rate limiter
     date.ts             toDateInputValue(), startOfDay() (UTC day boundary,
@@ -628,13 +812,16 @@ src/
                        "middleware")
 prisma/
   schema.prisma        User, MemberProfile, MembershipPlan, Membership,
-                       Payment, Attendance models; Role/UserStatus/
+                       Payment, Attendance, TrainerProfile,
+                       TrainerAssignment models; Role/UserStatus/
                        MembershipStatus/PaymentMethod/PaymentStatus/
-                       AttendanceMethod enums
-  seed.ts              Core test users + 22 member fixtures + 3 plans +
-                       a sample membership/payment
-  migrations/           ...including a hand-written partial unique index
-                        for Attendance (see "How attendance works")
+                       AttendanceMethod/AssignmentStatus enums
+  seed.ts              Core test users + 22 member fixtures + 2 trainer
+                       fixtures + 3 plans + a sample membership/payment +
+                       sample trainer assignments
+  migrations/           ...including hand-written partial unique indexes
+                        for Attendance and TrainerAssignment (see "How
+                        attendance works" / "How trainer management works")
 prisma.config.ts       Prisma CLI configuration
 vitest.config.mts      Vitest configuration
 ```
@@ -669,8 +856,25 @@ vitest.config.mts      Vitest configuration
   mocked unit tests) — `src/server/prisma-errors.ts`'s
   `isUniqueConstraintError()` now checks every shape actually observed.
   Worth knowing if a future Prisma/adapter upgrade changes this again.
+- **A validation bug from Phase 2 got silently re-introduced in Phase 5**,
+  in a brand-new file, by copy-pasting the *pre-fix* version of the same
+  helper instead of reusing the fixed one — caught by a failing test,
+  not by inspection. Every `lib/validations/*.ts` file's "treat an empty
+  form field as unset" logic now imports from one shared module,
+  `lib/validations/shared.ts`, specifically so this can't happen a third
+  time. Worth remembering for any *new* validation schema in a later
+  phase: import `isBlank`/`optionalTrimmedString`/`optionalDate` from
+  `./shared` rather than writing a local version, however small it looks.
+- **Next.js's `redirect()` doesn't always produce an HTTP 3xx.** Called
+  from a Server Component after its parent layout has already started
+  streaming the response, it degrades to a client-side redirect
+  instruction embedded in the response instead (documented Next.js
+  behavior, not a bug) — `curl` can't follow that, a real browser does.
+  Found while testing Phase 5's trainer-portal pages; see the note under
+  "Manually test trainer management & assignment" above for what this
+  means for testing this app with a non-JS HTTP client.
 
 ## Roadmap
 
-Trainer management → trainer assignment & workouts → progress tracking →
-dashboards & analytics → notifications → hardening.
+Workout plans → progress tracking → dashboards & analytics →
+notifications → hardening.

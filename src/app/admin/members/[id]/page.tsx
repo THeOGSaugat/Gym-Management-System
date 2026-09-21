@@ -4,6 +4,8 @@ import { requireRole } from "@/lib/auth/session";
 import { getMember } from "@/server/services/member.service";
 import { listMembershipsForMember } from "@/server/services/membership.service";
 import { listPaymentsForMember } from "@/server/services/payment.service";
+import { getAssignmentInfoForMember } from "@/server/services/assignment.service";
+import { listTrainers } from "@/server/services/trainer.service";
 import { handlePageError } from "@/lib/service-error";
 import { toDateInputValue } from "@/lib/date";
 import { formatMinorUnits } from "@/lib/money";
@@ -19,7 +21,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { MemberForm } from "@/components/members/member-form";
+import { AssignTrainerForm } from "@/components/trainers/assign-trainer-form";
 import { updateMemberAction, setMemberStatusAction } from "../actions";
+import { assignTrainerAction, removeAssignmentAction } from "./assignment/actions";
 
 export const metadata: Metadata = {
   title: "Member details",
@@ -48,14 +52,18 @@ export default async function MemberDetailPage({
   const { id } = await params;
 
   const member = await getMember(actor, id).catch(handlePageError);
-  const [memberships, payments] = await Promise.all([
+  const [memberships, payments, assignmentInfo, activeTrainers] = await Promise.all([
     listMembershipsForMember(actor, member.id),
     listPaymentsForMember(actor, member.id),
+    getAssignmentInfoForMember(actor, member.id),
+    listTrainers(actor, { status: "ACTIVE" }),
   ]);
 
   const boundUpdateAction = updateMemberAction.bind(null, member.id);
   const nextStatus = member.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE";
   const toggleStatusAction = setMemberStatusAction.bind(null, member.id, nextStatus);
+  const boundAssignTrainerAction = assignTrainerAction.bind(null, member.id);
+  const boundRemoveAssignmentAction = removeAssignmentAction.bind(null, member.id);
 
   return (
     <div className="flex flex-col gap-6">
@@ -92,6 +100,58 @@ export default async function MemberDetailPage({
               emergencyContactPhone: member.memberProfile?.emergencyContactPhone ?? undefined,
             }}
           />
+        </CardContent>
+      </Card>
+
+      <Card className="max-w-2xl">
+        <CardHeader>
+          <CardTitle>Trainer</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {assignmentInfo.current ? (
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-sm">
+                Currently assigned to{" "}
+                <Link
+                  href={`/admin/trainers/${assignmentInfo.current.trainerId}`}
+                  className="font-medium hover:underline"
+                >
+                  {assignmentInfo.current.trainer.fullName}
+                </Link>{" "}
+                <span className="text-muted-foreground">
+                  since {assignmentInfo.current.startDate.toLocaleDateString()}
+                </span>
+              </p>
+              <form action={boundRemoveAssignmentAction}>
+                <Button type="submit" variant="outline" size="sm">
+                  Remove
+                </Button>
+              </form>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No trainer assigned.</p>
+          )}
+
+          {activeTrainers.items.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              No active trainers available.{" "}
+              <Link href="/admin/trainers/new" className="hover:underline">
+                Add one
+              </Link>
+              .
+            </p>
+          ) : (
+            <AssignTrainerForm
+              action={boundAssignTrainerAction}
+              trainers={activeTrainers.items.map((t) => ({
+                id: t.id,
+                fullName: t.fullName,
+                specialization: t.trainerProfile?.specialization,
+              }))}
+              currentTrainerId={assignmentInfo.current?.trainerId}
+              submitLabel={assignmentInfo.current ? "Change trainer" : "Assign trainer"}
+            />
+          )}
         </CardContent>
       </Card>
 

@@ -1,12 +1,6 @@
 import { z } from "zod";
 import { parseMinorUnits } from "@/lib/money";
-
-function optionalTrimmed(maxLength: number) {
-  return z.preprocess(
-    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
-    z.string().trim().max(maxLength).optional(),
-  );
-}
+import { optionalDate, optionalTrimmedString } from "./shared";
 
 const amountField = z
   .string()
@@ -30,16 +24,13 @@ export const paymentMethodValues = ["CASH", "BANK_TRANSFER", "OTHER"] as const;
 export const paymentStatusValues = ["SUCCEEDED", "PENDING", "FAILED", "REFUNDED"] as const;
 
 export const recordPaymentSchema = z.object({
-  membershipId: optionalTrimmed(100),
+  membershipId: optionalTrimmedString(100),
   amountMinor: amountField,
   method: z.enum(paymentMethodValues, { message: "Choose a payment method" }),
   status: z.enum(paymentStatusValues).default("SUCCEEDED"),
-  reference: optionalTrimmed(120),
-  notes: optionalTrimmed(500),
-  paidAt: z.preprocess(
-    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
-    z.coerce.date().optional(),
-  ),
+  reference: optionalTrimmedString(120),
+  notes: optionalTrimmedString(500),
+  paidAt: optionalDate(),
 });
 
 export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;

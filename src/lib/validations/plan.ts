@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { parseMinorUnits } from "@/lib/money";
+import { optionalTrimmedString } from "./shared";
 
 const priceField = z
   .string()
@@ -17,10 +18,7 @@ const priceField = z
 
 export const planSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(100, "Name is too long"),
-  description: z.preprocess(
-    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
-    z.string().trim().max(500).optional(),
-  ),
+  description: optionalTrimmedString(500),
   durationDays: z.coerce
     .number()
     .int("Duration must be a whole number of days")

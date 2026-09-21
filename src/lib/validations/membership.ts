@@ -1,9 +1,5 @@
 import { z } from "zod";
-
-const optionalDate = z.preprocess(
-  (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
-  z.coerce.date().optional(),
-);
+import { optionalDate, optionalTrimmedString } from "./shared";
 
 /**
  * Deliberately has no price/amount field at all — a membership's price is
@@ -16,16 +12,13 @@ export const assignMembershipSchema = z.object({
   // Defaults to today in the service if omitted — lets an admin schedule
   // a membership to start later (status starts PENDING) or backdate one
   // being entered after the fact.
-  startDate: optionalDate,
+  startDate: optionalDate(),
 });
 
 export type AssignMembershipInput = z.infer<typeof assignMembershipSchema>;
 
 export const cancelMembershipSchema = z.object({
-  reason: z.preprocess(
-    (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
-    z.string().trim().max(300).optional(),
-  ),
+  reason: optionalTrimmedString(300),
 });
 
 export type CancelMembershipInput = z.infer<typeof cancelMembershipSchema>;

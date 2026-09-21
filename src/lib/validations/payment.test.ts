@@ -72,4 +72,21 @@ describe("recordPaymentSchema", () => {
       expect(result.data.amountMinor).toBe(5000);
     }
   });
+
+  it("treats null optional fields (as FormData.get() returns for an absent key) the same as empty ones — not a validation error", () => {
+    const result = recordPaymentSchema.safeParse({
+      ...validInput,
+      membershipId: null,
+      reference: null,
+      notes: null,
+      paidAt: null,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.membershipId).toBeUndefined();
+      expect(result.data.reference).toBeUndefined();
+      expect(result.data.notes).toBeUndefined();
+      expect(result.data.paidAt).toBeUndefined();
+    }
+  });
 });

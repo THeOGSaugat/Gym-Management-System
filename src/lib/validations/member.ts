@@ -1,25 +1,5 @@
 import { z } from "zod";
-
-/**
- * A rendered HTML form's empty text input still submits as "" for that
- * field name. But FormData.get() returns `null` for a key that isn't
- * present at all — which happens for any caller that isn't a full render
- * of our own form (a hand-built request, a future API client, a field
- * removed by a future edit to the form). Treating only "" as "empty" and
- * leaving `null` to fail validation would make the schema's behavior
- * depend on how the request was constructed, not on the data. This
- * normalizes both to undefined before the rest of the schema runs.
- */
-function isBlank(value: unknown): boolean {
-  return value === null || (typeof value === "string" && value.trim() === "");
-}
-
-function optionalTrimmedString(maxLength: number) {
-  return z.preprocess(
-    (value) => (isBlank(value) ? undefined : value),
-    z.string().trim().max(maxLength).optional(),
-  );
-}
+import { isBlank, optionalTrimmedString } from "./shared";
 
 const optionalDateOfBirth = z.preprocess(
   (value) => (isBlank(value) ? undefined : value),

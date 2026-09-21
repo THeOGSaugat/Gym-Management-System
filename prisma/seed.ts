@@ -71,6 +71,20 @@ function slugEmail(fullName: string): string {
   return `${fullName.toLowerCase().replace(/[^a-z]+/g, ".")}@gym.test`;
 }
 
+// Extra TRAINER fixtures (beyond the core trainer@gym.test), each with a
+// TrainerProfile — enough to exercise the admin trainer list/search and
+// to have a trainer with genuinely zero assigned members to check the
+// empty state.
+const EXTRA_TRAINERS: Array<{
+  fullName: string;
+  phone?: string;
+  specialization?: string;
+  experienceYears?: number;
+}> = [
+  { fullName: "Deepak Kapoor", phone: "555-0201", specialization: "Strength & conditioning", experienceYears: 6 },
+  { fullName: "Hannah Weiss", phone: "555-0202", specialization: "Yoga & mobility", experienceYears: 9 },
+];
+
 // A small, realistic plan catalog for testing membership assignment,
 // renewal and payments without having to create plans by hand first.
 const PLANS: Array<{
@@ -124,9 +138,10 @@ async function main() {
 
   const sharedPasswordHash = await hashPassword("Member123!");
 
+  const extraMemberIds: Record<string, string> = {};
   for (const extra of EXTRA_MEMBERS) {
     const email = slugEmail(extra.fullName);
-    await db.user.upsert({
+    const user = await db.user.upsert({
       where: { email },
       update: {},
       create: {
@@ -139,6 +154,31 @@ async function main() {
         memberProfile: { create: {} },
       },
     });
+    extraMemberIds[extra.fullName] = user.id;
+  }
+
+  const extraTrainerIds: string[] = [];
+  for (const extra of EXTRA_TRAINERS) {
+    const email = slugEmail(extra.fullName);
+    const user = await db.user.upsert({
+      where: { email },
+      update: {},
+      create: {
+        email,
+        passwordHash: sharedPasswordHash,
+        fullName: extra.fullName,
+        phone: extra.phone,
+        role: "TRAINER",
+        status: "ACTIVE",
+        trainerProfile: {
+          create: {
+            specialization: extra.specialization,
+            experienceYears: extra.experienceYears,
+          },
+        },
+      },
+    });
+    extraTrainerIds.push(user.id);
   }
 
   const planIds: string[] = [];
@@ -194,13 +234,46 @@ async function main() {
     }
   }
 
+  // Assign a few members to trainers, so the trainer portal
+  // (/trainer/members, /trainer/members/[id]) and the admin trainer
+  // detail page's roster both have something to show immediately.
+  // Deepak gets a small roster (including the core member fixture, so
+  // /trainer/members/[id]'s membership-status/attendance sections have
+  // real data to render); Hannah is left with zero, to exercise that
+  // page's empty state without extra setup.
+  const coreTrainerId = coreUserIds.TRAINER;
+  const [deepakId] = extraTrainerIds;
+
+  if (coreTrainerId && deepakId && coreMemberId && adminId) {
+    const assignments: Array<{ memberId: string; trainerId: string }> = [
+      { memberId: coreMemberId, trainerId: deepakId },
+      ...(["Priya Sharma", "Liam Chen"] as const)
+        .map((name) => extraMemberIds[name])
+        .filter((id): id is string => !!id)
+        .map((memberId) => ({ memberId, trainerId: coreTrainerId })),
+    ];
+
+    for (const { memberId, trainerId } of assignments) {
+      const existing = await db.trainerAssignment.findFirst({
+        where: { memberId, status: "ACTIVE" },
+      });
+      if (!existing) {
+        await db.trainerAssignment.create({
+          data: { memberId, trainerId, assignedByUserId: adminId },
+        });
+      }
+    }
+  }
+
   console.log("Seeded core test users:");
   for (const seedUser of CORE_USERS) {
     console.log(`  ${seedUser.role.padEnd(8)} ${seedUser.email}  /  ${seedUser.password}`);
   }
   console.log(`Seeded ${EXTRA_MEMBERS.length} extra member fixtures (password: Member123!)`);
+  console.log(`Seeded ${EXTRA_TRAINERS.length} extra trainer fixtures (password: Member123!)`);
   console.log(`Seeded ${PLANS.length} membership plans`);
   console.log("Seeded an active Monthly membership + payment for member@gym.test");
+  console.log("Seeded trainer assignments: member@gym.test -> Deepak Kapoor; Priya/Liam -> trainer@gym.test");
 }
 
 main()

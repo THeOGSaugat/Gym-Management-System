@@ -49,6 +49,14 @@ model User {
   attendance         Attendance[] @relation("MemberAttendance")
   attendanceRecorded Attendance[] @relation("AttendanceRecordedBy")
 
+  trainerProfile TrainerProfile?
+
+  // As the member/trainer in an assignment relationship.
+  assignmentsAsMember  TrainerAssignment[] @relation("MemberAssignments")
+  assignmentsAsTrainer TrainerAssignment[] @relation("TrainerAssignments")
+  // As the admin who created the assignment (audit trail, not ownership).
+  assignmentsCreated TrainerAssignment[] @relation("AssignmentCreatedBy")
+
   @@map("users")
 }
 
@@ -266,4 +274,69 @@ model Attendance {
   @@index([memberId, attendanceDate])
   @@index([attendanceDate])
   @@map("attendance")
+}
+
+// Trainer-specific data. Exists only for users with role = TRAINER —
+// a service-layer invariant (see trainer.service.ts), same as
+// MemberProfile. "Active status" deliberately reuses User.status
+// (ACTIVE/SUSPENDED) rather than a second flag here — the same
+// activate/deactivate mechanism Phase 2 built for members, not a
+// separate concept like "temporarily not accepting new clients."
+model TrainerProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  bio             String?
+  specialization  String?
+  experienceYears Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("trainer_profiles")
+}
+
+enum AssignmentStatus {
+  ACTIVE
+  ENDED
+}
+
+// A time-bounded member <-> trainer relationship, not a foreign key on
+// either User — ending an assignment (removing it, or replacing it with
+// a different trainer) never deletes the row, only closes it
+// (status: ENDED, endDate set), so "who trained this member, and when"
+// survives. See assignment.service.ts: assigning a member who already
+// has an active assignment ends the old row and opens a new one in the
+// same operation — "assign" and "change trainer" are the same thing
+// from the data model's point of view.
+//
+// At most one ACTIVE assignment per member at a time — enforced here by
+// a hand-written partial unique index (Prisma's schema DSL has no
+// declarative syntax for one; see this model's migration), the same
+// technique Phase 4 used for "at most one open attendance session."
+model TrainerAssignment {
+  id String @id @default(cuid())
+
+  memberId String
+  member   User   @relation("MemberAssignments", fields: [memberId], references: [id], onDelete: Cascade)
+
+  trainerId String
+  trainer   User   @relation("TrainerAssignments", fields: [trainerId], references: [id], onDelete: Cascade)
+
+  status    AssignmentStatus @default(ACTIVE)
+  startDate DateTime         @default(now())
+  endDate   DateTime?
+
+  notes String?
+
+  assignedByUserId String
+  assignedBy       User   @relation("AssignmentCreatedBy", fields: [assignedByUserId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([memberId, status])
+  @@index([trainerId, status])
+  @@map("trainer_assignments")
 }

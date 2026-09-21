@@ -6,6 +6,10 @@ import {
   canRecordAttendanceFor,
   canViewAttendanceFor,
   canViewAllAttendance,
+  canManageTrainers,
+  canManageAssignments,
+  canViewTrainerRoster,
+  canTrainerAccessMember,
 } from "./policies";
 
 const admin = { id: "admin-1", role: "ADMIN" } as const;
@@ -41,7 +45,7 @@ describe("canViewMember", () => {
     expect(canViewMember(member, otherMember.id)).toBe(false);
   });
 
-  it("denies TRAINER viewing a member — no assignment feature yet", () => {
+  it("denies TRAINER viewing a member here — an assigned trainer's access goes through the separate trainer-portal path (canTrainerAccessMember), not this function", () => {
     expect(canViewMember(trainer, member.id)).toBe(false);
   });
 });
@@ -97,5 +101,57 @@ describe("canViewAllAttendance", () => {
     expect(canViewAllAttendance(admin)).toBe(true);
     expect(canViewAllAttendance(member)).toBe(false);
     expect(canViewAllAttendance(trainer)).toBe(false);
+  });
+});
+
+describe("canManageTrainers", () => {
+  it("allows only ADMIN", () => {
+    expect(canManageTrainers(admin)).toBe(true);
+    expect(canManageTrainers(trainer)).toBe(false);
+    expect(canManageTrainers(member)).toBe(false);
+  });
+});
+
+describe("canManageAssignments", () => {
+  it("allows only ADMIN", () => {
+    expect(canManageAssignments(admin)).toBe(true);
+    expect(canManageAssignments(trainer)).toBe(false);
+    expect(canManageAssignments(member)).toBe(false);
+  });
+});
+
+describe("canViewTrainerRoster", () => {
+  const otherTrainer = { id: "trainer-2", role: "TRAINER" } as const;
+
+  it("allows ADMIN to view any trainer's roster", () => {
+    expect(canViewTrainerRoster(admin, trainer.id)).toBe(true);
+  });
+
+  it("allows a trainer to view their own roster", () => {
+    expect(canViewTrainerRoster(trainer, trainer.id)).toBe(true);
+  });
+
+  it("denies a trainer viewing another trainer's roster", () => {
+    expect(canViewTrainerRoster(trainer, otherTrainer.id)).toBe(false);
+  });
+
+  it("denies MEMBER", () => {
+    expect(canViewTrainerRoster(member, trainer.id)).toBe(false);
+  });
+});
+
+describe("canTrainerAccessMember", () => {
+  it("allows ADMIN regardless of the isAssigned flag", () => {
+    expect(canTrainerAccessMember(admin, false)).toBe(true);
+    expect(canTrainerAccessMember(admin, true)).toBe(true);
+  });
+
+  it("allows a TRAINER only when isAssigned is true", () => {
+    expect(canTrainerAccessMember(trainer, true)).toBe(true);
+    expect(canTrainerAccessMember(trainer, false)).toBe(false);
+  });
+
+  it("denies MEMBER regardless of the isAssigned flag", () => {
+    expect(canTrainerAccessMember(member, true)).toBe(false);
   });
 });

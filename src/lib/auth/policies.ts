@@ -59,7 +59,16 @@ export function canManageFinancialRecords(actor: Actor): boolean {
  * Who can *view* a given member's memberships/payments: an admin (any
  * member), or that member viewing their own. Deliberately the same shape
  * as canViewMember — a member's financial history is exactly as private
- * as their profile, never visible to another member or to a trainer.
+ * as their profile, never visible to another member.
+ *
+ * Never relaxed for a trainer, even an assigned one, and never will be —
+ * this governs *payments*, which Phase 5's requirements explicitly keep
+ * out of a trainer's reach ("TRAINER must NOT: Manage payments"). A
+ * trainer's narrow, read-only visibility into an assigned member's
+ * *membership status* (not payments) is a deliberately separate check —
+ * see src/server/services/trainer-portal.service.ts — rather than a
+ * change to this function, precisely so relaxing one can never
+ * accidentally relax the other.
  */
 export function canViewFinancialRecordsFor(actor: Actor, targetUserId: string): boolean {
   return canViewMember(actor, targetUserId);
@@ -79,11 +88,13 @@ export function canRecordAttendanceFor(actor: Actor, targetUserId: string): bool
 }
 
 /**
- * Who can view a given member's attendance history: an admin (any
- * member), or that member viewing their own. Same shape as
- * canViewFinancialRecordsFor — attendance is exactly as private as a
- * member's financial history, never visible to another member or a
- * trainer.
+ * Who can view a given member's attendance *through attendance.service.ts*
+ * (the admin/self-only surface built in Phase 4): an admin (any member),
+ * or that member viewing their own — never another member. This function
+ * is left exactly as Phase 4 built it. A trainer's read-only visibility
+ * into an *assigned* member's attendance is a separate, additive check
+ * in src/server/services/trainer-portal.service.ts, not a relaxation of
+ * this one — Phase 4's attendance module is untouched by Phase 5.
  */
 export function canViewAttendanceFor(actor: Actor, targetUserId: string): boolean {
   return canViewMember(actor, targetUserId);
@@ -92,4 +103,52 @@ export function canViewAttendanceFor(actor: Actor, targetUserId: string): boolea
 /** Only admins see the gym-wide attendance views (today's list, full history). */
 export function canViewAllAttendance(actor: Actor): boolean {
   return actor.role === "ADMIN";
+}
+
+/**
+ * Only admins manage the trainer roster (list, create, edit, activate/
+ * deactivate) and assign/reassign/remove trainer <-> member
+ * relationships. Mirrors canManageMembers exactly.
+ */
+export function canManageTrainers(actor: Actor): boolean {
+  return actor.role === "ADMIN";
+}
+
+/** Same permission as canManageTrainers today; kept separate in case
+ * assignment management and trainer-roster management ever diverge
+ * (e.g. a senior trainer allowed to reassign within their own team but
+ * not create new trainer accounts). */
+export function canManageAssignments(actor: Actor): boolean {
+  return actor.role === "ADMIN";
+}
+
+/**
+ * Who can view a trainer's own assigned-members roster: an admin (any
+ * trainer's roster), or that trainer viewing their own — never another
+ * trainer's. Same shape as canViewMember, applied to a trainer's client
+ * list instead of a member's profile.
+ */
+export function canViewTrainerRoster(actor: Actor, targetTrainerId: string): boolean {
+  if (actor.role === "ADMIN") return true;
+  return actor.role === "TRAINER" && actor.id === targetTrainerId;
+}
+
+/**
+ * Whether a trainer may access one specific assigned member's (reduced)
+ * profile, attendance, and membership status — the trainer-portal
+ * surface in trainer-portal.service.ts, not member.service.ts /
+ * attendance.service.ts / membership.service.ts, which are untouched.
+ *
+ * This is the one policy function in this file that isn't self-contained
+ * pure logic on IDs alone — "is this member currently assigned to this
+ * trainer" requires a database lookup, which would break every other
+ * function here being a framework-free pure function. So the *lookup*
+ * lives in the service layer (trainer-portal.service.ts fetches the
+ * assignment), and only the already-known *answer* is passed in here as
+ * `isAssigned`. An admin bypasses the assignment check entirely, same as
+ * every other canView*For function in this file.
+ */
+export function canTrainerAccessMember(actor: Actor, isAssigned: boolean): boolean {
+  if (actor.role === "ADMIN") return true;
+  return actor.role === "TRAINER" && isAssigned;
 }

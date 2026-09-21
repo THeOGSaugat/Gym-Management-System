@@ -22,6 +22,14 @@ describe("planSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("treats a null description (as FormData.get() returns for an absent key) the same as an empty one — not a validation error", () => {
+    const result = planSchema.safeParse({ ...validInput, description: null });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.description).toBeUndefined();
+    }
+  });
+
   it("rejects a missing name", () => {
     const result = planSchema.safeParse({ ...validInput, name: "" });
     expect(result.success).toBe(false);
