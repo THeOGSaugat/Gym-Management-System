@@ -46,6 +46,9 @@ model User {
   membershipsCreated Membership[] @relation("MembershipCreatedBy")
   paymentsRecorded   Payment[]    @relation("PaymentRecordedBy")
 
+  attendance         Attendance[] @relation("MemberAttendance")
+  attendanceRecorded Attendance[] @relation("AttendanceRecordedBy")
+
   @@map("users")
 }
 
@@ -203,4 +206,64 @@ model Payment {
   @@index([memberId, paidAt])
   @@index([membershipId])
   @@map("payments")
+}
+
+enum AttendanceMethod {
+  // Self check-in via the member portal's Check In button — the only
+  // method actually reachable today.
+  MANUAL
+  // Reserved, unused: a future QR-code check-in flow calls the exact
+  // same attendance.service.ts functions with method: "QR" instead of
+  // "MANUAL" — no business-logic changes needed when that's built. See
+  // the comment on checkIn() in attendance.service.ts.
+  QR
+}
+
+// One row per check-in. `recordedByUserId` is always set (to whoever
+// performed the action — today, always the member themself) and is
+// separate from `method` (how it happened); this keeps "who" and "how"
+// independent so a future admin-assisted or QR check-in doesn't need a
+// new column, just a different value for each.
+//
+// Duplicate-checkin prevention is deliberately about *open sessions*,
+// not "once per day": a member can check in, check out, and check in
+// again later the same day. What's actually disallowed is two
+// simultaneously open sessions for the same member — enforced here at
+// the service layer (see attendance.service.ts) and, as defense in
+// depth against a race between two concurrent requests, by a partial
+// unique index added by hand in this model's migration (Prisma's schema
+// DSL has no declarative syntax for a partial/filtered unique index):
+// CREATE UNIQUE INDEX ... ON attendance (memberId) WHERE checkOutAt IS NULL.
+model Attendance {
+  id String @id @default(cuid())
+
+  memberId String
+  member   User   @relation("MemberAttendance", fields: [memberId], references: [id], onDelete: Cascade)
+
+  // Always set from the server's clock at the moment of the request,
+  // never accepted as client input — see checkIn()/checkOut() in
+  // attendance.service.ts, whose input types have no date/time field at
+  // all for exactly this reason (the same "safe by construction, not
+  // just by validation" pattern used for a membership's price).
+  checkInAt  DateTime
+  checkOutAt DateTime?
+
+  // The calendar day checkInAt falls on, at UTC midnight — computed
+  // server-side once at check-in time (see lib/date.ts's startOfDay).
+  // Stored redundantly alongside checkInAt so "today's attendance" and
+  // date-range history queries can filter/index on a plain date value
+  // instead of computing day boundaries in every query.
+  attendanceDate DateTime
+
+  method AttendanceMethod @default(MANUAL)
+
+  recordedByUserId String?
+  recordedBy       User?   @relation("AttendanceRecordedBy", fields: [recordedByUserId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([memberId, attendanceDate])
+  @@index([attendanceDate])
+  @@map("attendance")
 }

@@ -12,3 +12,17 @@ export function toDateInputValue(date: Date | null | undefined): string | undefi
   const day = String(date.getUTCDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
+
+/**
+ * Midnight UTC of the calendar day `date` falls on. Used to compute
+ * Attendance.attendanceDate from a server-generated check-in timestamp —
+ * always from the server's own `new Date()`, never from client input
+ * (see attendance.service.ts). UTC, not local time, for the same reason
+ * the rest of this codebase's date math avoids timezone-dependent
+ * "today" — there's no per-gym timezone setting yet, and a fixed
+ * reference point keeps every server instance computing the same day
+ * for the same instant.
+ */
+export function startOfDay(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}

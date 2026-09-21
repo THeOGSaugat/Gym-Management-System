@@ -64,3 +64,32 @@ export function canManageFinancialRecords(actor: Actor): boolean {
 export function canViewFinancialRecordsFor(actor: Actor, targetUserId: string): boolean {
   return canViewMember(actor, targetUserId);
 }
+
+/**
+ * Who can check a given member in/out: only that member, themselves.
+ * Phase 4's requirements are explicit that admin's attendance role is
+ * view-only — there is no front-desk/admin-assisted check-in feature
+ * yet. Kept as its own function (rather than reusing canViewMember's
+ * shape) because relaxing *this* rule later — e.g. to let an admin check
+ * a member in at the front desk — should never accidentally also change
+ * who can *view* attendance, which is a separate, broader permission.
+ */
+export function canRecordAttendanceFor(actor: Actor, targetUserId: string): boolean {
+  return actor.role === "MEMBER" && actor.id === targetUserId;
+}
+
+/**
+ * Who can view a given member's attendance history: an admin (any
+ * member), or that member viewing their own. Same shape as
+ * canViewFinancialRecordsFor — attendance is exactly as private as a
+ * member's financial history, never visible to another member or a
+ * trainer.
+ */
+export function canViewAttendanceFor(actor: Actor, targetUserId: string): boolean {
+  return canViewMember(actor, targetUserId);
+}
+
+/** Only admins see the gym-wide attendance views (today's list, full history). */
+export function canViewAllAttendance(actor: Actor): boolean {
+  return actor.role === "ADMIN";
+}

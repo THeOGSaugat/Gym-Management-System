@@ -17,8 +17,12 @@ This repository is being built in phases.
   membership plan catalog, assigning/renewing/cancelling memberships with
   server-computed dates and status, manual payment recording, and
   member-facing "my membership" / "my payments" views.
-- Trainer management, attendance, workout plans, dashboards,
-  notifications: not built yet.
+- **Phase 4 (attendance)** — done: member self-check-in/out with at-most-
+  one-open-session enforced at both the service layer and a database
+  constraint, admin "today" and searchable/date-filtered history views,
+  and a QR-ready service design (no QR UI yet — see below).
+- Trainer management, workout plans, dashboards, notifications: not
+  built yet.
 
 ## Stack
 
@@ -67,7 +71,7 @@ production.
 ```bash
 npx prisma generate      # generates the typed client into src/generated/prisma
 npx prisma migrate dev   # creates/updates tables in Neon (users, member_profiles,
-                          # membership_plans, memberships, payments, ...)
+                          # membership_plans, memberships, payments, attendance, ...)
 npm run db:seed          # creates test users, member fixtures, plans, a sample
                           # membership + payment — see below
 ```
@@ -100,6 +104,9 @@ Open [http://localhost:3000](http://localhost:3000).
 | `/admin/payments`, `/admin/payments/[id]` | ADMIN only — global payment list (search/filter/paginate) and detail |
 | `/member/membership` | MEMBER only — own current status + history, nobody else's |
 | `/member/payments` | MEMBER only — own payment history, nobody else's |
+| `/admin/attendance` | ADMIN only — today's check-ins/check-outs, gym-wide |
+| `/admin/attendance/history` | ADMIN only — full history, search + date-range filter, paginated |
+| `/member/attendance` | MEMBER only — own check-in/out button, today's status, own history |
 | `/forbidden` | shown when a signed-in user's role doesn't match the area |
 | `/api/health` | JSON health check (app + database) |
 
@@ -212,21 +219,51 @@ immediately.
    time. Log in as `trainer@gym.test` and try the same → also
    `/forbidden` — trainers get no financial access.
 
-## 9. Run the test suite
+## 9. Manually test attendance
+
+1. Log in as `member@gym.test` → `/member/attendance`. You should see
+   "Not checked in" and a **Check in** button.
+2. Click **Check in** → status flips to "Checked in — since [time]," the
+   button becomes **Check out**. The check-in time shown is the server's
+   clock at the moment you clicked, not anything from your browser.
+3. Log in as `admin@gym.test` (a second browser/incognito window, or log
+   out and back in) → `/admin/attendance` → that member shows up with
+   "Checked in" and no check-out time yet.
+4. Back as the member, click **Check out** → status returns to "Not
+   checked in," and `/admin/attendance` now shows a check-out time for
+   that row too.
+5. Click **Check in** again the same day → succeeds (a second visit the
+   same day is allowed — see "How attendance works" below for why this
+   isn't a "once per day" rule).
+6. `/admin/attendance/history` → search by the member's name, and filter
+   by date range (try a future date range → "No attendance matches your
+   search," the empty state, not a blank page or an error).
+7. While signed in as a **different** member, try loading
+   `/admin/attendance` or `/admin/attendance/history` directly →
+   redirected to `/forbidden`. Log in as `trainer@gym.test` and try
+   `/admin/attendance` and `/member/attendance` → both `/forbidden` —
+   Phase 4 gives trainers no attendance access at all, not even their
+   own (trainers aren't members and have no attendance to check in for).
+8. As one member, you cannot check in *for* another member or view their
+   attendance — there's no UI path to try this (the check-in button only
+   ever targets your own session), and it's rejected server-side even if
+   called directly (see the service tests).
+
+## 10. Run the test suite
 
 ```bash
 npm run test
 ```
 
 Runs Vitest against the service layer (`member.service.ts`,
-`plan.service.ts`, `membership.service.ts`, `payment.service.ts`), the
-pure membership date/status logic (`lib/membership.ts`), the
-authorization policies (`policies.ts`), and the Zod validation schemas —
-131 tests, using a mocked Prisma client, no database connection needed.
-See "How plans, memberships & payments work" below for what these tests
-do and don't cover.
+`plan.service.ts`, `membership.service.ts`, `payment.service.ts`,
+`attendance.service.ts`), the pure date/status logic (`lib/membership.ts`,
+`lib/date.ts`), the authorization policies (`policies.ts`), and the Zod
+validation schemas — 167 tests, using a mocked Prisma client, no database
+connection needed. See "How attendance works" and "How plans, memberships
+& payments work" below for what these tests do and don't cover.
 
-## 10. Production build
+## 11. Production build
 
 ```bash
 npm run build
@@ -384,6 +421,65 @@ build, and fails loudly on type errors since TypeScript strict mode is on.
   ↔ member assignment (a future phase) is a narrower, separate
   permission from full member-management access.
 
+## How attendance works
+
+- **"No duplicate check-in" means no duplicate *open* session, not "once
+  per day."** A member can check in, check out, and check in again later
+  the same day — what's actually disallowed is two simultaneously open
+  (checked-in-but-not-checked-out) sessions for the same member. This
+  reads directly from the instruction's own wording ("cannot check in
+  twice while already checked in"), and it's a deliberate, narrower rule
+  than the daily-unique-index design sketched in the original
+  architecture notes — worth knowing if you expected a hard one-visit-
+  per-day cap and don't see one.
+- **Enforced twice**, the same defense-in-depth pattern as everywhere
+  else in this codebase: a service-layer pre-check
+  (`findFirst({ checkOutAt: null })`) for a clean error message, plus a
+  partial unique index — `CREATE UNIQUE INDEX ... ON attendance
+  (memberId) WHERE checkOutAt IS NULL` — as the real guarantee against a
+  race between two concurrent check-in requests. Prisma's schema DSL has
+  no declarative syntax for a partial/filtered unique index, so this one
+  was hand-added to the migration's SQL (`prisma migrate dev
+  --create-only`, then edited before applying) rather than expressed in
+  `schema.prisma` directly.
+- **A real bug was caught testing that DB-level path against live Neon,
+  not just the mocked tests**: the error Prisma actually throws for a
+  P2002 raised through `@prisma/adapter-pg` nests the constraint name at
+  `meta.driverAdapterError.cause.constraint.index`, not the conventional
+  `meta.target` this codebase's error-mapping helper
+  (`isUniqueConstraintError`, used by member/membership/payment/
+  attendance services alike) originally checked. Confirmed by hand —
+  attempting a real duplicate open-session insert against Neon — the
+  helper now checks every shape actually observed (flat array, plain
+  string, and this nested driver-adapter form) rather than assuming one.
+- **Server time only.** `checkIn()`/`checkOut()` in
+  `attendance.service.ts` have no timestamp parameter in their input
+  types at all — `checkInAt`/`checkOutAt`/`attendanceDate` are always the
+  server's own `new Date()` at the moment the function runs. There is no
+  way for a client to submit a check-in time, past or future, because
+  the API surface doesn't accept one — the same "safe by construction"
+  pattern as a membership's price having no field on its create input.
+- **QR-readiness is a function signature, not a stub UI.**
+  `checkIn(actor, memberId, method)` already takes a `method`
+  (`MANUAL` | `QR`), and every authorization/duplicate/timestamp rule
+  lives inside that one function regardless of which value is passed. A
+  future QR flow is: decode a scanned code to a `memberId`, then call
+  `checkIn(actor, memberId, "QR")` — no changes to this file. Nothing
+  about QR generation, scanning, or a kiosk UI exists yet; building that
+  without the actual hardware/UX requirements to design against would be
+  exactly the "unnecessarily complicated" system the instructions said
+  to avoid.
+- **Authorization mirrors the rest of the app**: `canRecordAttendanceFor`
+  (self only, in Phase 4 — no admin-assisted or front-desk check-in
+  exists yet, matching the instructions' explicit "ADMIN can: View..."
+  vs. "MEMBER can: ... Check in/out" split) and `canViewAttendanceFor`
+  (admin or self), both in `lib/auth/policies.ts`, both re-checked inside
+  every service function independent of page-level gating. Relaxing
+  `canRecordAttendanceFor` later to let an admin check a member in at
+  the front desk is a one-line policy change — `checkIn`'s signature
+  already accepts any `actor` + target `memberId`, it just isn't wired
+  to a UI for that today.
+
 ## Known simplifications (intentional, for a learning project)
 
 - **No self-serve registration.** Only the seed script creates users right
@@ -438,6 +534,28 @@ build, and fails loudly on type errors since TypeScript strict mode is on.
   `sweepMembershipStatuses()` directly today; every real read path
   already self-heals on its own, so this is a convenience, not a gap in
   correctness.
+- **No admin-assisted or front-desk check-in.** Only a member can check
+  themself in/out (see "How attendance works"). A gym's actual front
+  desk workflow — staff checking a member in by name/card/QR — isn't
+  built; that's a policy-function change plus a small UI once it's
+  actually needed, not a redesign.
+- **No QR code check-in.** The service is shaped to support it
+  (`checkIn`'s `method` parameter) but no scanning, code generation, or
+  kiosk UI exists — deliberately, since a real QR flow needs actual
+  hardware/UX requirements to design against, and a half-built one would
+  be worse than none.
+- **Attendance has no admin edit/delete.** A check-in/out record can't
+  be corrected by an admin if a member forgets to check out or checks in
+  by mistake — there's no UI or service function for it yet. Today
+  that's just a stale "still checked in" row until the member checks out
+  (or checks in again elsewhere, which the one-open-session rule would
+  then correctly block until they do).
+- **No timezone setting.** "Today" and `attendanceDate` are computed in
+  UTC (see `lib/date.ts`'s `startOfDay`), same as membership date math.
+  For a gym far from UTC, the boundary between "yesterday" and "today"
+  in the UI won't match the front desk's wall clock. A per-gym timezone
+  setting would fix this without changing the attendance logic itself —
+  just what `now` gets normalized against.
 
 ## Project structure
 
@@ -457,11 +575,14 @@ src/
       plans/              list, actions.ts (create/edit/activate/deactivate)
         new/, [id]/           create / detail+edit+toggle
       payments/           global list (search/filter/paginate) + [id] detail
+      attendance/         today's attendance
+        history/            search + date-range filter, paginated
     trainer/            layout.tsx (requireRole TRAINER) + dashboard/
     member/              layout.tsx (requireRole MEMBER) + dashboard/
       profile/             self-service profile: view/edit own data only
       membership/           own current status + history, nobody else's
       payments/             own payment history, nobody else's
+      attendance/            check-in/out button, today's status, own history
     dashboard/            role router — redirects to the right area
     forbidden/             shown on a role mismatch
     api/
@@ -474,6 +595,7 @@ src/
     plans/             PlanForm (admin create/edit)
     memberships/       AssignMembershipForm, CancelMembershipForm
     payments/          RecordPaymentForm
+    attendance/        CheckInOutButton
   server/
     db.ts              Prisma client singleton
     prisma-errors.ts   isUniqueConstraintError() helper
@@ -482,15 +604,18 @@ src/
       plan.service.ts         Plan catalog CRUD + authorization
       membership.service.ts    Assign/renew/cancel/sweep + authorization
       payment.service.ts        Record/list/view + authorization
+      attendance.service.ts      Check in/out, today's status, history + authorization
   lib/
     auth/              config.ts (edge-safe) / auth.ts (Node, full config)
                        / session.ts (requireUser, requireRole)
-                       / policies.ts (canManageMembers, canManageFinancialRecords, ...)
+                       / policies.ts (canManageMembers, canManageFinancialRecords,
+                                      canRecordAttendanceFor, ...)
                        / password.ts / actions.ts (logout)
     validations/       Zod schemas (auth.ts, member.ts, plan.ts, membership.ts, payment.ts)
     service-error.ts    maps thrown domain errors -> notFound()/redirect()
     rate-limit.ts       in-memory login rate limiter
-    date.ts             toDateInputValue() for <input type="date">
+    date.ts             toDateInputValue(), startOfDay() (UTC day boundary,
+                        used by both membership and attendance date math)
     membership.ts        pure date/status logic: computeEffectiveStatus,
                          isMembershipCurrentlyActive, computeRenewalStartDate, addDays
     money.ts             parseMinorUnits/formatMinorUnits/toDecimalString —
@@ -503,10 +628,13 @@ src/
                        "middleware")
 prisma/
   schema.prisma        User, MemberProfile, MembershipPlan, Membership,
-                       Payment models; Role/UserStatus/MembershipStatus/
-                       PaymentMethod/PaymentStatus enums
+                       Payment, Attendance models; Role/UserStatus/
+                       MembershipStatus/PaymentMethod/PaymentStatus/
+                       AttendanceMethod enums
   seed.ts              Core test users + 22 member fixtures + 3 plans +
                        a sample membership/payment
+  migrations/           ...including a hand-written partial unique index
+                        for Attendance (see "How attendance works")
 prisma.config.ts       Prisma CLI configuration
 vitest.config.mts      Vitest configuration
 ```
@@ -533,8 +661,16 @@ vitest.config.mts      Vitest configuration
   requires `@types/node@^22 || >=24`, and `^22` is also the correct match
   for this repo's actual Node 22 LTS deploy target (`^20` was already a
   mismatch, just one nothing had surfaced yet).
+- **`@prisma/adapter-pg`'s P2002 error shape isn't the conventional one.**
+  A unique-constraint violation raised through this driver adapter nests
+  the constraint name at `meta.driverAdapterError.cause.constraint.index`
+  rather than the commonly-documented flat `meta.target`. Found in Phase
+  4 by testing a real duplicate-check-in race against Neon (not just the
+  mocked unit tests) — `src/server/prisma-errors.ts`'s
+  `isUniqueConstraintError()` now checks every shape actually observed.
+  Worth knowing if a future Prisma/adapter upgrade changes this again.
 
 ## Roadmap
 
-Trainer management → attendance → trainer assignment & workouts →
-progress tracking → dashboards & analytics → notifications → hardening.
+Trainer management → trainer assignment & workouts → progress tracking →
+dashboards & analytics → notifications → hardening.

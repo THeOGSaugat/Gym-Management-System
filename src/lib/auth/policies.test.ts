@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { canManageMembers, canViewMember, canEditMemberProfile } from "./policies";
+import {
+  canManageMembers,
+  canViewMember,
+  canEditMemberProfile,
+  canRecordAttendanceFor,
+  canViewAttendanceFor,
+  canViewAllAttendance,
+} from "./policies";
 
 const admin = { id: "admin-1", role: "ADMIN" } as const;
 const trainer = { id: "trainer-1", role: "TRAINER" } as const;
@@ -45,5 +52,50 @@ describe("canEditMemberProfile", () => {
     expect(canEditMemberProfile(member, member.id)).toBe(true);
     expect(canEditMemberProfile(member, otherMember.id)).toBe(false);
     expect(canEditMemberProfile(trainer, member.id)).toBe(false);
+  });
+});
+
+describe("canRecordAttendanceFor", () => {
+  it("allows a member to check themselves in/out", () => {
+    expect(canRecordAttendanceFor(member, member.id)).toBe(true);
+  });
+
+  it("denies a member checking in/out on behalf of another member", () => {
+    expect(canRecordAttendanceFor(member, otherMember.id)).toBe(false);
+  });
+
+  it("denies ADMIN — Phase 4 has no admin-assisted check-in yet", () => {
+    expect(canRecordAttendanceFor(admin, member.id)).toBe(false);
+  });
+
+  it("denies TRAINER", () => {
+    expect(canRecordAttendanceFor(trainer, member.id)).toBe(false);
+  });
+});
+
+describe("canViewAttendanceFor", () => {
+  it("allows ADMIN to view any member's attendance", () => {
+    expect(canViewAttendanceFor(admin, member.id)).toBe(true);
+    expect(canViewAttendanceFor(admin, otherMember.id)).toBe(true);
+  });
+
+  it("allows a member to view their own attendance", () => {
+    expect(canViewAttendanceFor(member, member.id)).toBe(true);
+  });
+
+  it("denies a member viewing another member's attendance", () => {
+    expect(canViewAttendanceFor(member, otherMember.id)).toBe(false);
+  });
+
+  it("denies TRAINER", () => {
+    expect(canViewAttendanceFor(trainer, member.id)).toBe(false);
+  });
+});
+
+describe("canViewAllAttendance", () => {
+  it("allows only ADMIN", () => {
+    expect(canViewAllAttendance(admin)).toBe(true);
+    expect(canViewAllAttendance(member)).toBe(false);
+    expect(canViewAllAttendance(trainer)).toBe(false);
   });
 });

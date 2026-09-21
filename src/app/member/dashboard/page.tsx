@@ -9,7 +9,8 @@ export default function MemberDashboardPage() {
         Your workout plan and progress will appear here in later phases.
       </p>
       <div className="flex flex-wrap gap-3">
-        <Button nativeButton={false} render={<Link href="/member/profile">View my profile</Link>} />
+        <Button nativeButton={false} render={<Link href="/member/attendance">Check in / out</Link>} />
+        <Button variant="outline" nativeButton={false} render={<Link href="/member/profile">View my profile</Link>} />
         <Button variant="outline" nativeButton={false} render={<Link href="/member/membership">My membership</Link>} />
         <Button variant="outline" nativeButton={false} render={<Link href="/member/payments">My payments</Link>} />
       </div>
