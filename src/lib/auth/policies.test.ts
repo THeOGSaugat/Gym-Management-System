@@ -18,6 +18,9 @@ import {
   canViewWorkoutPlanFor,
   canRecordProgressFor,
   canViewProgressFor,
+  canViewAdminDashboard,
+  canViewTrainerDashboard,
+  canViewMemberDashboard,
 } from "./policies";
 
 const admin = { id: "admin-1", role: "ADMIN" } as const;
@@ -278,5 +281,38 @@ describe("canViewProgressFor", () => {
   it("allows the assigned trainer, denies an unassigned one", () => {
     expect(canViewProgressFor(trainer, member.id, true)).toBe(true);
     expect(canViewProgressFor(trainer, member.id, false)).toBe(false);
+  });
+});
+
+describe("canViewAdminDashboard", () => {
+  it("allows ADMIN", () => {
+    expect(canViewAdminDashboard(admin)).toBe(true);
+  });
+
+  it("denies TRAINER and MEMBER", () => {
+    expect(canViewAdminDashboard(trainer)).toBe(false);
+    expect(canViewAdminDashboard(member)).toBe(false);
+  });
+});
+
+describe("canViewTrainerDashboard", () => {
+  it("allows TRAINER", () => {
+    expect(canViewTrainerDashboard(trainer)).toBe(true);
+  });
+
+  it("denies ADMIN and MEMBER", () => {
+    expect(canViewTrainerDashboard(admin)).toBe(false);
+    expect(canViewTrainerDashboard(member)).toBe(false);
+  });
+});
+
+describe("canViewMemberDashboard", () => {
+  it("allows MEMBER", () => {
+    expect(canViewMemberDashboard(member)).toBe(true);
+  });
+
+  it("denies ADMIN and TRAINER", () => {
+    expect(canViewMemberDashboard(admin)).toBe(false);
+    expect(canViewMemberDashboard(trainer)).toBe(false);
   });
 });

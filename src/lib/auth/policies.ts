@@ -246,3 +246,30 @@ export function canViewProgressFor(
   if (actor.role === "MEMBER") return actor.id === targetMemberId;
   return actor.role === "TRAINER" && isAssignedTrainer;
 }
+
+/**
+ * Who can view the gym-wide admin dashboard (aggregate member/revenue/
+ * attendance metrics across everyone): admins only. Unlike every
+ * canView*For function above, this has no target id — the admin
+ * dashboard is never "about" one specific member, it's a global
+ * aggregate, so there's nothing to scope to besides the role itself.
+ */
+export function canViewAdminDashboard(actor: Actor): boolean {
+  return actor.role === "ADMIN";
+}
+
+/**
+ * Who can view a trainer's own dashboard: that trainer, for themselves.
+ * Kept as its own function (rather than reusing canViewTrainerRoster)
+ * because the dashboard is always "my own" — there is no admin-viewing-
+ * a-specific-trainer's-dashboard feature, unlike the roster page, which
+ * an admin can view for any trainer.
+ */
+export function canViewTrainerDashboard(actor: Actor): boolean {
+  return actor.role === "TRAINER";
+}
+
+/** Who can view a member's own dashboard: that member, for themselves. Always self — no admin/trainer view of it exists. */
+export function canViewMemberDashboard(actor: Actor): boolean {
+  return actor.role === "MEMBER";
+}

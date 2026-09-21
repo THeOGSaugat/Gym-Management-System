@@ -34,7 +34,15 @@ This repository is being built in phases.
   view of their own plans, and member-recorded progress logs (weight,
   body fat %, body measurements, or a custom metric) — all built as new,
   additive services that leave every prior phase's code untouched.
-- Dashboards & analytics, notifications: not built yet.
+- **Phase 7 (dashboards & analytics)** — done: role-scoped dashboards for
+  all three roles, built entirely from existing data — no new tables.
+  Admin gets gym-wide metrics (member/trainer counts, a membership status
+  breakdown, revenue totals, today's attendance, recent payments/members);
+  a trainer gets metrics scoped to just their assigned members (today's
+  check-ins, active workout plans, recent progress); a member gets a
+  personal snapshot (membership status, current workout plan, recent
+  attendance/progress). See "How dashboards & analytics work" below.
+- Notifications: not built yet.
 
 ## Stack
 
@@ -388,7 +396,58 @@ portal screens all have something to look at immediately.
    "Progress" section shows their history; there's no admin edit control
    there either.
 
-## 12. Run the test suite
+## 12. Manually test dashboards & analytics
+
+1. Log in as `admin@gym.test` → `/admin/dashboard`. Confirm the stat
+   cards' numbers against the database yourself if you want to check
+   precisely — with the seed data, "Total members" is 24, "Active
+   trainers" is 3/3, and "Today's attendance" reflects however many
+   check-ins have happened today in your environment. The "Membership
+   status overview" bar chart should show a handful of members bucketed
+   into Active/Pending, plus a large "No membership yet" bar for the
+   many seeded members who were never assigned one. "Recent payments"
+   and "Recently joined members" both link through to their normal
+   admin detail pages.
+2. Record a brand-new payment (`/admin/members/[id]/payments/new` for
+   any member) → reload `/admin/dashboard` → "Total revenue," "This
+   month's revenue," and "Recent payments" all reflect it immediately —
+   nothing here is cached or precomputed.
+3. Log in as `trainer@gym.test` (Tara, assigned to Priya and Liam, who
+   have no workout plans or progress logs in the seed data) →
+   `/trainer/dashboard` → "Assigned members" reads 2, but "Active
+   workout plans," "Currently at the gym," and "Recent progress from
+   your members" all show their empty states — Tara's assigned members
+   genuinely have none of that data yet.
+4. Log in as `deepak.kapoor@gym.test` (assigned to `member@gym.test`,
+   who *does* have a workout plan and progress logs) → `/trainer/dashboard`
+   → "Active workout plans" is 1, and "Recent progress from your members"
+   lists Mo Member's seeded weight/body-fat entries. Confirm Priya's or
+   Liam's data never appears here — Deepak isn't assigned to them.
+5. Log in as `hannah.weiss@gym.test` (a trainer with zero assigned
+   members, per the seed data) → `/trainer/dashboard` → every stat reads
+   0 and the page shows "You don't have any assigned members yet"
+   instead of empty tables.
+6. Log in as `member@gym.test` → `/member/dashboard` → membership status
+   shows the seeded "Monthly" plan, current workout plan shows
+   "Foundations Block 1" with a link through to its detail page, recent
+   attendance and recent progress both show seeded entries, and
+   "Notifications" shows its explicit "coming in a later phase" placeholder
+   rather than a broken or empty-looking section.
+7. Log in as one of the extra seeded members with no data at all (e.g.
+   `sofia.rossi@gym.test`) → `/member/dashboard` → every card shows a
+   clear empty-state message ("You don't have a membership yet," "Your
+   trainer hasn't assigned you a workout plan yet," etc.) instead of a
+   blank or broken-looking page.
+8. Confirm cross-role/cross-actor boundaries: as a member, try
+   `/admin/dashboard` and `/trainer/dashboard` directly → both redirect
+   to `/forbidden` (a real HTTP redirect here, since these routes'
+   layouts run before any dashboard data is fetched — not the
+   streaming-redirect quirk noted elsewhere in this README). Same for a
+   trainer trying `/admin/dashboard`, and an admin trying
+   `/member/dashboard` (there is no admin view of a specific member's
+   personal dashboard — that's what `/admin/members/[id]` is for).
+
+## 13. Run the test suite
 
 ```bash
 npm run test
@@ -398,15 +457,16 @@ Runs Vitest against the service layer (`member.service.ts`,
 `plan.service.ts`, `membership.service.ts`, `payment.service.ts`,
 `attendance.service.ts`, `trainer.service.ts`, `assignment.service.ts`,
 `trainer-portal.service.ts`, `exercise.service.ts`, `workout.service.ts`,
-`progress.service.ts`), the pure date/status logic (`lib/membership.ts`,
-`lib/date.ts`), the authorization policies (`policies.ts`), and every Zod
-validation schema — 348 tests, using a mocked Prisma client, no database
-connection needed. See "How trainer management works," "How workout &
-progress tracking works," "How attendance works," and "How plans,
+`progress.service.ts`, `dashboard.service.ts`), the pure date/status logic
+(`lib/membership.ts`, `lib/date.ts`), the authorization policies
+(`policies.ts`), and every Zod validation schema — 369 tests, using a
+mocked Prisma client, no database connection needed. See "How trainer
+management works," "How workout & progress tracking works," "How
+dashboards & analytics work," "How attendance works," and "How plans,
 memberships & payments work" below for what these tests do and don't
 cover.
 
-## 13. Production build
+## 14. Production build
 
 ```bash
 npm run build
@@ -751,6 +811,90 @@ build, and fails loudly on type errors since TypeScript strict mode is on.
   every prior phase's service kept its existing tests passing
   unmodified.
 
+## How dashboards & analytics work
+
+- **No new tables.** Every figure on every dashboard is computed at
+  request time from the same models Phases 2–6 already built
+  (`User`, `Membership`, `Payment`, `Attendance`, `TrainerAssignment`,
+  `WorkoutPlan`, `ProgressLog`) — there's no materialized view, no
+  scheduled aggregation job, no cached snapshot to go stale. This
+  matches the instruction to build dashboards from existing data rather
+  than duplicating it, and means a number on a dashboard can never
+  drift from the record it's summarizing.
+- **`dashboard.service.ts` is a new, additive file**, same pattern as
+  `trainer-portal.service.ts` (Phase 5) and `workout.service.ts` (Phase
+  6) — it reads from other tables but never modifies how any existing
+  service authorizes or queries its own data.
+- **Three new policy functions, one per role** (`canViewAdminDashboard`,
+  `canViewTrainerDashboard`, `canViewMemberDashboard`), each just a role
+  check. Unlike almost every other policy function in this codebase,
+  none of these take a target id — a dashboard is always either a
+  global aggregate (admin) or "my own" (trainer/member), never "show me
+  a specific *other* person's dashboard," so there's nothing to scope
+  to beyond the role itself. (There is deliberately no admin-viewing-
+  a-specific-member's-personal-dashboard feature — `/admin/members/[id]`
+  already covers that.)
+- **The admin dashboard avoids N+1 queries by computing every figure
+  with `count`/`aggregate`/scoped `findMany` calls against a whole
+  table, run in parallel with `Promise.all`** — never a query issued
+  once per row of some other list. The one figure that needs more than
+  a single database aggregate — "how many members currently have an
+  active vs. expired vs. pending membership" — still costs exactly one
+  query (`membership.findMany` with a narrow `select`), followed by an
+  in-memory reduce; see the next point for why.
+- **"Membership status overview" buckets each *member* by their single
+  most recent membership row, not every historical row.** A member who
+  has renewed has one `Membership` row per renewal — counting all of
+  them by their stored status would let one member's old, superseded
+  row inflate the "expired" bucket while their brand-new row also counts
+  toward "active," double-counting one person into two buckets. Taking
+  only the latest row per member (by `startDate`) and computing its
+  *effective* status via the same `computeEffectiveStatus` helper
+  `membership.service.ts` uses for self-healing reads (never trusting a
+  possibly-stale stored `status` column) gives a true "how many members
+  stand in each state right now" snapshot instead of a count of
+  historical purchase events. Members who've never had a membership at
+  all appear in neither bucket — the UI shows them separately, as "No
+  membership yet," rather than silently leaving the totals looking like
+  they don't add up.
+- **Revenue counts only `SUCCEEDED` payments** — a `PENDING`, `FAILED`,
+  or `REFUNDED` payment row was never actual revenue and is excluded
+  from both the all-time and this-month totals, via the aggregate
+  query's `where` clause rather than filtering client-side.
+- **The trainer dashboard is scoped to assigned members with exactly
+  two queries, never a loop over the roster.** The assigned-member id
+  list is fetched once (`trainerAssignment.findMany`, `status: "ACTIVE"`
+  only), then every other query — today's attendance, recent progress —
+  filters with `memberId: { in: assignedMemberIds }` in a single round
+  trip. This is deliberately *not* built by calling
+  `trainer-portal.service.ts`'s existing per-member functions once per
+  assigned member, which would be exactly the N+1 pattern this phase's
+  requirements call out to avoid — that service is designed for "one
+  trainer looking at one member's page," not "summarize all of them at
+  once."
+- **The member dashboard is deliberately built by calling this
+  codebase's existing self-access service functions**
+  (`listMembershipsForMember`, `listAttendanceForMember`,
+  `listWorkoutPlansForMember`, `listProgressForMember`) rather than
+  querying those tables directly a second time. Each of those functions
+  already independently re-checks "is this actor allowed to see this
+  member's data" — trivially true here, since a member's dashboard only
+  ever asks about `actor.id` — so reusing them means this dashboard
+  can never drift from the authorization rules those same functions
+  enforce everywhere else they're used (their own pages included).
+- **No charting library was added.** The one place a visual proportion
+  genuinely helps — the admin dashboard's membership status breakdown —
+  is a `StatusBarChart` component built from a handful of styled `<div>`s
+  (a label, a count, a percentage, a proportional-width bar), not a new
+  dependency. Every other dashboard section is a plain stat card or
+  table, out of respect for the same "no unnecessary infra" precedent
+  every phase before this one followed.
+- **"Notifications" on the member dashboard is an explicit empty state,
+  not a hidden or missing feature.** There is no notification system
+  yet (see the roadmap) — the card says so directly rather than being
+  silently omitted, so a viewer doesn't mistake "not built yet" for "you
+  have none right now."
+
 ## Known simplifications (intentional, for a learning project)
 
 - **No self-serve registration.** Only the seed script creates users right
@@ -866,6 +1010,24 @@ build, and fails loudly on type errors since TypeScript strict mode is on.
   chronological list. Visualizing a metric over time is a UI-only
   addition later, not a data model change (`ProgressLog` already has
   everything a chart would need: metric, date, value).
+- **Dashboard figures are computed live on every page load, not cached
+  or precomputed.** For this app's data volume that's simply fast
+  enough (a handful of `count`/`aggregate` queries per load, run in
+  parallel); a materialized summary table or scheduled aggregation job
+  would be premature infrastructure exactly like the membership
+  "Sweep" utility above — nothing here needed it yet.
+- **No date-range picker on any dashboard.** The admin dashboard's "this
+  month's revenue" is a fixed calendar-month window; there's no
+  custom-range revenue/attendance report. That's a natural extension of
+  the same aggregate-query approach (a `dateFrom`/`dateTo` parameter),
+  not a redesign, if it's ever needed.
+- **No cross-trainer or per-trainer breakdown on the admin dashboard**
+  (e.g. "revenue/attendance by trainer's roster") — the admin dashboard
+  is gym-wide only; a trainer only ever sees their own dashboard, an
+  admin only ever sees the whole gym's.
+- **No notification system yet**, so the member dashboard's
+  "Notifications" card is an explicit, permanent-until-built empty
+  state rather than a feature — see "How dashboards & analytics work."
 
 ## Project structure
 
@@ -921,6 +1083,8 @@ src/
     exercises/         ExerciseForm (admin/trainer create/edit)
     workouts/          WorkoutPlanForm, AddWorkoutDayForm, AddWorkoutExerciseForm
     progress/          ProgressLogForm (member self-record)
+    dashboard/         StatCard, StatusBarChart (no charting library — see
+                       "How dashboards & analytics work")
   server/
     db.ts              Prisma client singleton
     prisma-errors.ts   isUniqueConstraintError() helper
@@ -943,6 +1107,10 @@ src/
       progress.service.ts           Member-self progress recording + admin/trainer
                                     read access — see "How workout & progress
                                     tracking works"
+      dashboard.service.ts           New, additive: role-scoped aggregate reads
+                                    for the three dashboards — getAdminDashboard,
+                                    getTrainerDashboard, getMemberDashboard — see
+                                    "How dashboards & analytics work"
   lib/
     auth/              config.ts (edge-safe) / auth.ts (Node, full config)
                        / session.ts (requireUser, requireRole)
@@ -950,7 +1118,8 @@ src/
                                       canRecordAttendanceFor, canManageTrainers,
                                       canTrainerAccessMember, canManageWorkoutPlanFor,
                                       canViewWorkoutPlanFor, canRecordProgressFor,
-                                      canViewProgressFor, ...)
+                                      canViewProgressFor, canViewAdminDashboard,
+                                      canViewTrainerDashboard, canViewMemberDashboard, ...)
                        / password.ts / actions.ts (logout)
     validations/       Zod schemas (auth.ts, member.ts, plan.ts, membership.ts,
                        payment.ts, trainer.ts, assignment.ts, exercise.ts,
@@ -959,8 +1128,9 @@ src/
                        "Notes on dependency versions" for why that matters)
     service-error.ts    maps thrown domain errors -> notFound()/redirect()
     rate-limit.ts       in-memory login rate limiter
-    date.ts             toDateInputValue(), startOfDay() (UTC day boundary,
-                        used by both membership and attendance date math)
+    date.ts             toDateInputValue(), startOfDay(), startOfMonth() (UTC
+                        day/month boundaries, used by membership, attendance,
+                        and the admin dashboard's revenue-this-month figure)
     membership.ts        pure date/status logic: computeEffectiveStatus,
                          isMembershipCurrentlyActive, computeRenewalStartDate, addDays
     money.ts             parseMinorUnits/formatMinorUnits/toDecimalString —
@@ -1040,4 +1210,4 @@ vitest.config.mts      Vitest configuration
 
 ## Roadmap
 
-Dashboards & analytics → notifications → hardening.
+Notifications → hardening.

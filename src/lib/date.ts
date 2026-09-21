@@ -26,3 +26,12 @@ export function toDateInputValue(date: Date | null | undefined): string | undefi
 export function startOfDay(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
+
+/**
+ * Midnight UTC on the first day of `date`'s calendar month — the same UTC
+ * convention as startOfDay, used by the admin dashboard to scope "this
+ * month's revenue" without a timezone-dependent boundary.
+ */
+export function startOfMonth(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+}
