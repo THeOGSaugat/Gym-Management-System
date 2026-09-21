@@ -44,3 +44,23 @@ export function canViewMember(actor: Actor, targetUserId: string): boolean {
 export function canEditMemberProfile(actor: Actor, targetUserId: string): boolean {
   return canViewMember(actor, targetUserId);
 }
+
+/**
+ * Only admins manage the plan catalog, create/renew/cancel memberships,
+ * and record payments. There is no financial-editing role short of
+ * ADMIN — a trainer does not get this, and a member's own "financial
+ * record" access is strictly read-only (see canViewFinancialRecordsFor).
+ */
+export function canManageFinancialRecords(actor: Actor): boolean {
+  return actor.role === "ADMIN";
+}
+
+/**
+ * Who can *view* a given member's memberships/payments: an admin (any
+ * member), or that member viewing their own. Deliberately the same shape
+ * as canViewMember — a member's financial history is exactly as private
+ * as their profile, never visible to another member or to a trainer.
+ */
+export function canViewFinancialRecordsFor(actor: Actor, targetUserId: string): boolean {
+  return canViewMember(actor, targetUserId);
+}

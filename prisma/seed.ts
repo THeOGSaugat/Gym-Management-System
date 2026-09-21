@@ -71,7 +71,28 @@ function slugEmail(fullName: string): string {
   return `${fullName.toLowerCase().replace(/[^a-z]+/g, ".")}@gym.test`;
 }
 
+// A small, realistic plan catalog for testing membership assignment,
+// renewal and payments without having to create plans by hand first.
+const PLANS: Array<{
+  name: string;
+  description: string;
+  durationDays: number;
+  priceMinor: number;
+}> = [
+  { name: "Monthly", description: "Billed every 30 days.", durationDays: 30, priceMinor: 4999 },
+  { name: "Quarterly", description: "Billed every 90 days.", durationDays: 90, priceMinor: 12999 },
+  { name: "Annual", description: "Billed once a year.", durationDays: 365, priceMinor: 44999 },
+];
+
+function addDays(date: Date, days: number): Date {
+  const result = new Date(date);
+  result.setUTCDate(result.getUTCDate() + days);
+  return result;
+}
+
 async function main() {
+  const coreUserIds: Partial<Record<Role, string>> = {};
+
   for (const seedUser of CORE_USERS) {
     const passwordHash = await hashPassword(seedUser.password);
 
@@ -86,6 +107,7 @@ async function main() {
         status: "ACTIVE",
       },
     });
+    coreUserIds[seedUser.role] = user.id;
 
     // Ensure the invariant "a MEMBER has one MemberProfile" holds even on
     // a re-run against a database seeded before Phase 2 existed (the
@@ -119,11 +141,66 @@ async function main() {
     });
   }
 
+  const planIds: string[] = [];
+  for (const plan of PLANS) {
+    const existing = await db.membershipPlan.findFirst({ where: { name: plan.name } });
+    const row = existing
+      ? await db.membershipPlan.update({ where: { id: existing.id }, data: plan })
+      : await db.membershipPlan.create({ data: plan });
+    planIds.push(row.id);
+  }
+
+  // Give the core member fixture a sample ACTIVE membership + a matching
+  // payment, so /member/membership, /member/payments, and the admin
+  // member-detail memberships/payments sections have something to show
+  // immediately, without needing to click through "Assign" by hand first.
+  const monthlyPlan = await db.membershipPlan.findFirst({ where: { name: "Monthly" } });
+  const coreMemberId = coreUserIds.MEMBER;
+  const adminId = coreUserIds.ADMIN;
+
+  if (monthlyPlan && coreMemberId && adminId) {
+    const existingMembership = await db.membership.findFirst({
+      where: { memberId: coreMemberId, status: "ACTIVE" },
+    });
+
+    if (!existingMembership) {
+      const startDate = new Date();
+      const membership = await db.membership.create({
+        data: {
+          memberId: coreMemberId,
+          planId: monthlyPlan.id,
+          startDate,
+          endDate: addDays(startDate, monthlyPlan.durationDays),
+          status: "ACTIVE",
+          planNameSnapshot: monthlyPlan.name,
+          priceMinorSnapshot: monthlyPlan.priceMinor,
+          currencySnapshot: monthlyPlan.currency,
+          createdByUserId: adminId,
+        },
+      });
+
+      await db.payment.create({
+        data: {
+          memberId: coreMemberId,
+          membershipId: membership.id,
+          amountMinor: monthlyPlan.priceMinor,
+          currency: monthlyPlan.currency,
+          method: "CASH",
+          status: "SUCCEEDED",
+          paidAt: startDate,
+          recordedByUserId: adminId,
+        },
+      });
+    }
+  }
+
   console.log("Seeded core test users:");
   for (const seedUser of CORE_USERS) {
     console.log(`  ${seedUser.role.padEnd(8)} ${seedUser.email}  /  ${seedUser.password}`);
   }
   console.log(`Seeded ${EXTRA_MEMBERS.length} extra member fixtures (password: Member123!)`);
+  console.log(`Seeded ${PLANS.length} membership plans`);
+  console.log("Seeded an active Monthly membership + payment for member@gym.test");
 }
 
 main()

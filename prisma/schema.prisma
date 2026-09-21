@@ -39,6 +39,13 @@ model User {
 
   memberProfile MemberProfile?
 
+  // As the member on their own memberships/payments.
+  memberships Membership[] @relation("MemberMemberships")
+  payments    Payment[]    @relation("MemberPayments")
+  // As the admin who created/recorded them (audit trail, not ownership).
+  membershipsCreated Membership[] @relation("MembershipCreatedBy")
+  paymentsRecorded   Payment[]    @relation("PaymentRecordedBy")
+
   @@map("users")
 }
 
@@ -69,4 +76,131 @@ model MemberProfile {
   updatedAt DateTime @updatedAt
 
   @@map("member_profiles")
+}
+
+// The catalog of what the gym sells. A Membership is an instance of a
+// plan purchased by a member — see the comment there for why plan terms
+// are snapshotted onto the Membership rather than read live from here.
+model MembershipPlan {
+  id           String  @id @default(cuid())
+  name         String
+  description  String?
+  // Duration in days, not months — "add N days" sidesteps the whole class
+  // of bug around months of different lengths (a plan starting Jan 31).
+  durationDays Int
+  // Integer minor units (cents), never a float — money is never stored as
+  // a float in this codebase. See Payment.amountMinor for the same rule.
+  priceMinor Int
+  currency   String  @default("USD")
+  isActive   Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships Membership[]
+
+  @@map("membership_plans")
+}
+
+enum MembershipStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+// A purchased membership. Always a new row per purchase/renewal — never
+// edited to extend its own end date — so renewal history is preserved
+// (see membership.service.ts). `status` is the last value we computed or
+// an admin explicitly set; the *authoritative* answer to "is this active
+// right now" is always computed fresh from status + dates (see
+// src/lib/membership.ts), the same "derive, don't just trust the stored
+// flag" rule as the rest of this codebase's account-status handling.
+model Membership {
+  id String @id @default(cuid())
+
+  memberId String
+  member   User   @relation("MemberMemberships", fields: [memberId], references: [id], onDelete: Cascade)
+
+  planId String
+  plan   MembershipPlan @relation(fields: [planId], references: [id])
+
+  startDate DateTime
+  endDate   DateTime
+  status    MembershipStatus @default(PENDING)
+
+  // Snapshot of the plan's terms at purchase time. If the admin later
+  // raises the plan's price, this membership must still show what was
+  // actually charged — never join to the live plan for historical display.
+  planNameSnapshot   String
+  priceMinorSnapshot Int
+  currencySnapshot   String
+
+  cancelledAt  DateTime?
+  cancelReason String?
+
+  createdByUserId String
+  createdBy       User   @relation("MembershipCreatedBy", fields: [createdByUserId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payments Payment[]
+
+  @@index([memberId, status])
+  @@index([status, endDate])
+  @@map("memberships")
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  OTHER
+}
+
+enum PaymentStatus {
+  SUCCEEDED
+  PENDING
+  FAILED
+  REFUNDED
+}
+
+// Append-only by design: there is no update/delete surface for a Payment
+// anywhere in this codebase. A correction (a bounced cheque, a refund) is
+// recorded as its own new row, not an edit to this one — an accounting
+// record must never silently change after the fact. See README for what
+// that means today (no refund-linkage tooling yet) vs. later.
+model Payment {
+  id String @id @default(cuid())
+
+  memberId String
+  member   User   @relation("MemberPayments", fields: [memberId], references: [id], onDelete: Cascade)
+
+  // Nullable: a payment isn't always tied to a specific membership (could
+  // be a one-off charge), but most are.
+  membershipId String?
+  membership   Membership? @relation(fields: [membershipId], references: [id])
+
+  amountMinor Int
+  currency    String @default("USD")
+
+  method PaymentMethod
+  status PaymentStatus @default(SUCCEEDED)
+
+  // External reference (bank transfer id, receipt number, ...), not a
+  // payment-gateway transaction id — there is no gateway integration yet.
+  reference String?
+  notes     String?
+
+  paidAt DateTime @default(now())
+
+  recordedByUserId String
+  recordedBy       User   @relation("PaymentRecordedBy", fields: [recordedByUserId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([memberId, paidAt])
+  @@index([membershipId])
+  @@map("payments")
 }

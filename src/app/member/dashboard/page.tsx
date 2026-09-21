@@ -6,11 +6,12 @@ export default function MemberDashboardPage() {
     <div className="flex flex-col gap-4">
       <h1 className="text-2xl font-semibold tracking-tight">Member dashboard</h1>
       <p className="text-muted-foreground">
-        Your membership status, workout plan, progress and payment history
-        will appear here in later phases.
+        Your workout plan and progress will appear here in later phases.
       </p>
-      <div>
+      <div className="flex flex-wrap gap-3">
         <Button nativeButton={false} render={<Link href="/member/profile">View my profile</Link>} />
+        <Button variant="outline" nativeButton={false} render={<Link href="/member/membership">My membership</Link>} />
+        <Button variant="outline" nativeButton={false} render={<Link href="/member/payments">My payments</Link>} />
       </div>
     </div>
   );

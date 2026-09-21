@@ -13,8 +13,12 @@ This repository is being built in phases.
 - **Phase 2 (member management)** — done: admin CRUD over member accounts
   (list/search/filter/create/edit/deactivate), a member self-service
   profile page, and a Vitest suite covering the service layer.
-- Trainer management, memberships, payments, attendance, workout plans,
-  dashboards, notifications: not built yet.
+- **Phase 3 (plans, memberships & payments)** — done: admin-managed
+  membership plan catalog, assigning/renewing/cancelling memberships with
+  server-computed dates and status, manual payment recording, and
+  member-facing "my membership" / "my payments" views.
+- Trainer management, attendance, workout plans, dashboards,
+  notifications: not built yet.
 
 ## Stack
 
@@ -62,8 +66,10 @@ production.
 
 ```bash
 npx prisma generate      # generates the typed client into src/generated/prisma
-npx prisma migrate dev   # creates/updates tables in Neon (users, member_profiles, ...)
-npm run db:seed          # creates test users + member fixtures — see below
+npx prisma migrate dev   # creates/updates tables in Neon (users, member_profiles,
+                          # membership_plans, memberships, payments, ...)
+npm run db:seed          # creates test users, member fixtures, plans, a sample
+                          # membership + payment — see below
 ```
 
 ## 4. Run the app locally
@@ -86,6 +92,14 @@ Open [http://localhost:3000](http://localhost:3000).
 | `/trainer/dashboard` | TRAINER only |
 | `/member/dashboard` | MEMBER only |
 | `/member/profile` | MEMBER only — view/edit **own** profile, nobody else's |
+| `/admin/plans` | ADMIN only — membership plan catalog |
+| `/admin/plans/new`, `/admin/plans/[id]` | ADMIN only — create/edit/(de)activate a plan |
+| `/admin/members/[id]/memberships/new` | ADMIN only — assign a membership to that member |
+| `/admin/members/[id]/memberships/[membershipId]` | ADMIN only — membership detail: renew, cancel, its payments |
+| `/admin/members/[id]/payments/new` | ADMIN only — record a payment for that member |
+| `/admin/payments`, `/admin/payments/[id]` | ADMIN only — global payment list (search/filter/paginate) and detail |
+| `/member/membership` | MEMBER only — own current status + history, nobody else's |
+| `/member/payments` | MEMBER only — own payment history, nobody else's |
 | `/forbidden` | shown when a signed-in user's role doesn't match the area |
 | `/api/health` | JSON health check (app + database) |
 
@@ -110,6 +124,12 @@ creates member accounts through `/admin/members/new` (ADMIN/TRAINER
 accounts still need the seed script, or a future admin UI). Never run the
 seed script against a production database, and never reuse these
 passwords anywhere real.
+
+The seed script also creates three membership plans (**Monthly** $49.99/
+30 days, **Quarterly** $129.99/90 days, **Annual** $449.99/365 days) and
+gives `member@gym.test` an active Monthly membership with a matching cash
+payment, so the membership/payment screens have something to look at
+immediately.
 
 ## 6. Manually test the auth flow
 
@@ -156,18 +176,57 @@ passwords anywhere real.
 9. Log in as `trainer@gym.test` → try `/admin/members` → redirected to
    `/forbidden`. Trainers don't get member-management access automatically.
 
-## 8. Run the test suite
+## 8. Manually test plans, memberships & payments
+
+1. Log in as `admin@gym.test` → `/admin/plans`. You should see Monthly,
+   Quarterly and Annual, all Active.
+2. Create a new plan → it appears in the list. Deactivate it → its badge
+   flips to Inactive, and it **disappears from the "assign membership"
+   plan dropdown** (`/admin/members/[id]/memberships/new`) while still
+   showing in `/admin/plans` itself (admins can see inactive plans; the
+   assignment flow can't select them).
+3. Open `member@gym.test`'s detail page (`/admin/members/[id]`) — you
+   should see their seeded active Monthly membership and its payment.
+4. Try "Assign membership" on that same member while their Monthly
+   membership is still active → rejected with "This member already has
+   an active or pending membership," and no second row is created.
+5. Open the active membership's detail page → click **Renew**. A *new*
+   membership row is created, status PENDING, starting the day after the
+   current one's end date, at the plan's *current* price — the original
+   row is untouched and stays ACTIVE.
+6. On a still-ACTIVE (or PENDING) membership, click **Cancel** with a
+   reason → status flips to CANCELLED, the reason is shown. Try
+   cancelling it again → rejected ("already cancelled"). Try cancelling
+   an EXPIRED membership (if you have one) → also rejected.
+7. Record a payment for a member (`/admin/members/[id]/payments/new`) →
+   try a negative or zero amount → rejected with a clear message before
+   anything is saved. Then record a valid one (e.g. `25.50`) → it appears
+   on the member's detail page, `/admin/payments` (global list, with
+   search/method/status filters), and the payment's own detail page.
+8. Log in as that member → `/member/membership` shows their current
+   status (or "no active membership" if none) plus full history;
+   `/member/payments` shows exactly the payment you just recorded.
+9. While signed in as a **different** member, try loading
+   `/admin/payments`, `/admin/plans`, or another member's
+   `/admin/members/[id]` directly → redirected to `/forbidden` every
+   time. Log in as `trainer@gym.test` and try the same → also
+   `/forbidden` — trainers get no financial access.
+
+## 9. Run the test suite
 
 ```bash
 npm run test
 ```
 
-Runs Vitest against the service layer (`member.service.ts`), the
-authorization policies (`policies.ts`), and the Zod validation schemas,
-using a mocked Prisma client — no database connection needed. See "How
-member management works" below for what these tests do and don't cover.
+Runs Vitest against the service layer (`member.service.ts`,
+`plan.service.ts`, `membership.service.ts`, `payment.service.ts`), the
+pure membership date/status logic (`lib/membership.ts`), the
+authorization policies (`policies.ts`), and the Zod validation schemas —
+131 tests, using a mocked Prisma client, no database connection needed.
+See "How plans, memberships & payments work" below for what these tests
+do and don't cover.
 
-## 9. Production build
+## 10. Production build
 
 ```bash
 npm run build
@@ -261,6 +320,70 @@ build, and fails loudly on type errors since TypeScript strict mode is on.
   future phase could add integration tests against a real (branched or
   local) database if that gap starts to matter.
 
+## How plans, memberships & payments work
+
+- **A membership snapshots its plan's terms at purchase time**
+  (`planNameSnapshot`, `priceMinorSnapshot`, `currencySnapshot`). If an
+  admin later changes the Monthly plan's price, every *existing*
+  membership still shows what was actually charged — the UI never joins
+  to the live plan for historical display, only for picking a plan when
+  assigning a *new* membership.
+- **"Is this membership active" is always computed, never just read off
+  the stored `status` column** (`src/lib/membership.ts`,
+  `computeEffectiveStatus`/`isMembershipCurrentlyActive`) — the same
+  "derive, don't trust a stale flag" rule the rest of this codebase
+  applies to account status. There's no cron job; instead, every read
+  path (`getMembership`, `listMembershipsForMember`, and before any
+  lifecycle action) self-heals a stale row — an ACTIVE membership past
+  its `endDate` flips to EXPIRED, a PENDING one whose `startDate` has
+  arrived flips to ACTIVE — and persists the correction. An admin
+  "Sweep" utility (`sweepMembershipStatuses`) exists for peace of mind
+  but nothing depends on it having been run recently.
+- **Renewal always creates a new row**, never edits the old one's end
+  date, so renewal/pricing history survives. The new start date is the
+  day after the current membership's end date (if renewing before
+  expiry — the member keeps every day they paid for) or today (if it's
+  already expired — no back-dated free coverage). Durations are always
+  "add N days," never "add a month," which sidesteps the class of bug
+  where a plan starting Jan 31 lands on a nonexistent date.
+- **Only one ACTIVE-or-PENDING membership per member at a time.**
+  Assigning a second one while the first is still open is rejected — use
+  Renew instead, which is the one path allowed to legitimately queue up
+  a second (future-dated) row against an existing one.
+- **"Do not trust client-provided prices" is enforced structurally for
+  memberships**: the assign-membership form has no price/amount field at
+  all — `createMembership`'s input type doesn't accept one. The price is
+  always read from the `MembershipPlan` row found by `planId`,
+  server-side. There is nothing for a tampered request to override,
+  because the field doesn't exist on the API surface in the first place
+  (same trick as Phase 2's `updateOwnProfile` having no target-user
+  parameter).
+- **Payment amounts, by contrast, genuinely are admin-entered** — a
+  payment is the manual bookkeeping of a real-world cash/transfer
+  transaction, not a price read from an automated checkout, so there's
+  no "live source of truth" to derive it from instead. What's enforced:
+  admin-only, a positive integer amount within a sane cap (see
+  `lib/validations/payment.ts`), and — if a membership is specified —
+  that it actually belongs to the member the payment is being recorded
+  against.
+- **Payments are append-only.** There is no edit or delete endpoint
+  anywhere in the codebase for a `Payment` row. `PaymentStatus` (
+  `SUCCEEDED`/`PENDING`/`FAILED`/`REFUNDED`) is set once at creation, not
+  transitioned afterward — a correction (a bounced cheque, a refund) is
+  meant to be recorded as its own new payment row, not an edit to the
+  original. There's no refund-linkage tooling yet (see known
+  limitations) — for now a correction is just a new row with its own
+  notes explaining why.
+- **Authorization mirrors the member-management pattern exactly**:
+  `canManageFinancialRecords` (ADMIN only — create/edit plans, assign/
+  renew/cancel memberships, record payments) and
+  `canViewFinancialRecordsFor` (ADMIN or the member themself — view
+  memberships/payments), both in `lib/auth/policies.ts`, both re-checked
+  inside every service function regardless of what called it. A trainer
+  gets none of this automatically, matching the instruction that trainer
+  ↔ member assignment (a future phase) is a narrower, separate
+  permission from full member-management access.
+
 ## Known simplifications (intentional, for a learning project)
 
 - **No self-serve registration.** Only the seed script creates users right
@@ -291,6 +414,30 @@ build, and fails loudly on type errors since TypeScript strict mode is on.
 - **No hard delete for members**, only deactivate (status → SUSPENDED).
   This matches the architecture doc's stance that financial/activity
   history must survive — appropriate even before that history exists.
+- **No payment gateway integration** (Stripe, Razorpay, etc.) — by
+  design for this phase. All payments are manually recorded by an admin
+  (cash, bank transfer, or "other"). The `Payment` model's shape
+  (amount, method, status, reference, notes) is deliberately generic
+  enough that a gateway could write into it later without a schema
+  change, but no gateway code exists.
+- **No refund workflow.** `PaymentStatus` includes `REFUNDED` as a value
+  an admin can select, but nothing automates issuing one, links it back
+  to the original payment, or adjusts a membership's dates/status as a
+  side effect. A "refund" today is just: record a new payment row noting
+  what happened.
+- **No membership expiry notifications.** Memberships do expire
+  correctly (see above), but nobody gets told — no "expiring in 3 days"
+  email/reminder. That's Phase 9 (notifications) territory.
+- **Single currency assumption in the UI.** The schema stores a
+  `currency` string per plan/membership/payment (not hardcoded), but
+  `formatMinorUnits()` and the forms assume USD throughout. Multi-
+  currency display would need UI work, not a data model change.
+- **The membership "Sweep" utility has no scheduled trigger** — there's
+  no cron/background-job infrastructure (deliberately, per the "no
+  unnecessary infra" instruction). It's only reachable by calling
+  `sweepMembershipStatuses()` directly today; every real read path
+  already self-heals on its own, so this is a convenience, not a gap in
+  correctness.
 
 ## Project structure
 
@@ -301,10 +448,20 @@ src/
     admin/             layout.tsx (requireRole ADMIN) + dashboard/
       members/           list (search/filter/paginate), actions.ts
         new/                create-member page
-        [id]/                member detail: view, edit, deactivate
+        [id]/                member detail: profile, memberships, payments
+          memberships/         actions.ts (assign/renew/cancel)
+            new/                    assign-membership page
+            [membershipId]/         membership detail: renew, cancel, its payments
+          payments/             actions.ts (record)
+            new/                    record-payment page
+      plans/              list, actions.ts (create/edit/activate/deactivate)
+        new/, [id]/           create / detail+edit+toggle
+      payments/           global list (search/filter/paginate) + [id] detail
     trainer/            layout.tsx (requireRole TRAINER) + dashboard/
     member/              layout.tsx (requireRole MEMBER) + dashboard/
       profile/             self-service profile: view/edit own data only
+      membership/           own current status + history, nobody else's
+      payments/             own payment history, nobody else's
     dashboard/            role router — redirects to the right area
     forbidden/             shown on a role mismatch
     api/
@@ -314,20 +471,30 @@ src/
     ui/                shadcn/ui primitives
     layout/            SiteHeader (public), AppHeader (signed-in areas)
     members/           MemberForm (admin create/edit), SelfProfileForm
+    plans/             PlanForm (admin create/edit)
+    memberships/       AssignMembershipForm, CancelMembershipForm
+    payments/          RecordPaymentForm
   server/
     db.ts              Prisma client singleton
     prisma-errors.ts   isUniqueConstraintError() helper
     services/
-      member.service.ts  All member business logic + authorization
+      member.service.ts      Member business logic + authorization
+      plan.service.ts         Plan catalog CRUD + authorization
+      membership.service.ts    Assign/renew/cancel/sweep + authorization
+      payment.service.ts        Record/list/view + authorization
   lib/
     auth/              config.ts (edge-safe) / auth.ts (Node, full config)
                        / session.ts (requireUser, requireRole)
-                       / policies.ts (canManageMembers, canViewMember, ...)
+                       / policies.ts (canManageMembers, canManageFinancialRecords, ...)
                        / password.ts / actions.ts (logout)
-    validations/       Zod schemas (auth.ts, member.ts)
+    validations/       Zod schemas (auth.ts, member.ts, plan.ts, membership.ts, payment.ts)
     service-error.ts    maps thrown domain errors -> notFound()/redirect()
     rate-limit.ts       in-memory login rate limiter
     date.ts             toDateInputValue() for <input type="date">
+    membership.ts        pure date/status logic: computeEffectiveStatus,
+                         isMembershipCurrentlyActive, computeRenewalStartDate, addDays
+    money.ts             parseMinorUnits/formatMinorUnits/toDecimalString —
+                         the only places money crosses the decimal-string boundary
     errors.ts / api-response.ts
   types/               next-auth.d.ts (session/JWT type augmentation)
   test/                prisma-mock.ts, setup.ts (Vitest + mocked Prisma)
@@ -335,8 +502,11 @@ src/
   proxy.ts             Route protection (Next.js 16's "Proxy", formerly
                        "middleware")
 prisma/
-  schema.prisma        User, MemberProfile models; Role/UserStatus enums
-  seed.ts              Core test users + 22 member fixtures
+  schema.prisma        User, MemberProfile, MembershipPlan, Membership,
+                       Payment models; Role/UserStatus/MembershipStatus/
+                       PaymentMethod/PaymentStatus enums
+  seed.ts              Core test users + 22 member fixtures + 3 plans +
+                       a sample membership/payment
 prisma.config.ts       Prisma CLI configuration
 vitest.config.mts      Vitest configuration
 ```
@@ -366,6 +536,5 @@ vitest.config.mts      Vitest configuration
 
 ## Roadmap
 
-Trainer management → memberships & expiry → payments → attendance →
-trainer assignment & workouts → progress tracking → dashboards &
-analytics → notifications → hardening.
+Trainer management → attendance → trainer assignment & workouts →
+progress tracking → dashboards & analytics → notifications → hardening.
