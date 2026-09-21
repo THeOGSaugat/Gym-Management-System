@@ -120,3 +120,20 @@ export async function listAssignedMembers(actor: Actor, trainerId: string) {
 
   return assignments;
 }
+
+/**
+ * The one query every "is this trainer allowed to touch this member's
+ * data" check ultimately depends on — no authorization decision here,
+ * just the underlying fact. Used by trainer-portal.service.ts (Phase 5)
+ * and workout.service.ts / progress.service.ts (Phase 6) so this lookup
+ * has exactly one implementation instead of being re-written per file.
+ */
+export async function isMemberAssignedToTrainer(
+  memberId: string,
+  trainerId: string,
+): Promise<boolean> {
+  const assignment = await db.trainerAssignment.findFirst({
+    where: { memberId, trainerId, status: "ACTIVE" },
+  });
+  return !!assignment;
+}

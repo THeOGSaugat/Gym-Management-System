@@ -6,6 +6,8 @@ import { listMembershipsForMember } from "@/server/services/membership.service";
 import { listPaymentsForMember } from "@/server/services/payment.service";
 import { getAssignmentInfoForMember } from "@/server/services/assignment.service";
 import { listTrainers } from "@/server/services/trainer.service";
+import { listWorkoutPlansForMember } from "@/server/services/workout.service";
+import { listProgressForMember } from "@/server/services/progress.service";
 import { handlePageError } from "@/lib/service-error";
 import { toDateInputValue } from "@/lib/date";
 import { formatMinorUnits } from "@/lib/money";
@@ -43,6 +45,12 @@ const PAYMENT_STATUS_VARIANT = {
   REFUNDED: "outline",
 } as const;
 
+const PLAN_STATUS_VARIANT = {
+  ACTIVE: "default",
+  COMPLETED: "outline",
+  CANCELLED: "outline",
+} as const;
+
 export default async function MemberDetailPage({
   params,
 }: {
@@ -52,12 +60,15 @@ export default async function MemberDetailPage({
   const { id } = await params;
 
   const member = await getMember(actor, id).catch(handlePageError);
-  const [memberships, payments, assignmentInfo, activeTrainers] = await Promise.all([
-    listMembershipsForMember(actor, member.id),
-    listPaymentsForMember(actor, member.id),
-    getAssignmentInfoForMember(actor, member.id),
-    listTrainers(actor, { status: "ACTIVE" }),
-  ]);
+  const [memberships, payments, assignmentInfo, activeTrainers, workoutPlans, progressLogs] =
+    await Promise.all([
+      listMembershipsForMember(actor, member.id),
+      listPaymentsForMember(actor, member.id),
+      getAssignmentInfoForMember(actor, member.id),
+      listTrainers(actor, { status: "ACTIVE" }),
+      listWorkoutPlansForMember(actor, member.id),
+      listProgressForMember(actor, member.id),
+    ]);
 
   const boundUpdateAction = updateMemberAction.bind(null, member.id);
   const nextStatus = member.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE";
@@ -248,6 +259,78 @@ export default async function MemberDetailPage({
                     <TableCell>
                       <Badge variant={PAYMENT_STATUS_VARIANT[payment.status]}>{payment.status}</Badge>
                     </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="max-w-2xl">
+        <CardHeader>
+          <CardTitle>Workout plans</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {workoutPlans.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No workout plans yet.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Trainer</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {workoutPlans.map((plan) => (
+                  <TableRow key={plan.id}>
+                    <TableCell className="font-medium">{plan.name}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      <Link href={`/admin/trainers/${plan.trainerId}`} className="hover:underline">
+                        View trainer
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={PLAN_STATUS_VARIANT[plan.status]}>{plan.status}</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+          <p className="mt-3 text-xs text-muted-foreground">
+            Workout plans are created and managed by a member&apos;s assigned
+            trainer. This is a read-only summary.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card className="max-w-2xl">
+        <CardHeader>
+          <CardTitle>Progress</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {progressLogs.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No progress logged yet.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Metric</TableHead>
+                  <TableHead>Value</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {progressLogs.slice(0, 10).map((log) => (
+                  <TableRow key={log.id}>
+                    <TableCell className="text-muted-foreground">
+                      {log.recordedAt.toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>{log.metric === "CUSTOM" ? log.customLabel : log.metric}</TableCell>
+                    <TableCell className="font-medium">{log.value}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

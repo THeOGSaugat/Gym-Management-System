@@ -27,7 +27,14 @@ This repository is being built in phases.
   (reduced profile, attendance, membership status — no payments, no other
   members) via a new, additive read layer that leaves Phases 2–4's
   services untouched.
-- Workout plans, dashboards, notifications: not built yet.
+- **Phase 6 (workout plans & progress tracking)** — done: a shared
+  exercise library (admin- and trainer-managed), trainer-authored
+  workout plans for assigned members (days, each with an ordered list of
+  exercises carrying sets/reps/weight/rest/notes), a read-only member
+  view of their own plans, and member-recorded progress logs (weight,
+  body fat %, body measurements, or a custom metric) — all built as new,
+  additive services that leave every prior phase's code untouched.
+- Dashboards & analytics, notifications: not built yet.
 
 ## Stack
 
@@ -77,9 +84,12 @@ production.
 npx prisma generate      # generates the typed client into src/generated/prisma
 npx prisma migrate dev   # creates/updates tables in Neon (users, member_profiles,
                           # membership_plans, memberships, payments, attendance,
-                          # trainer_profiles, trainer_assignments, ...)
+                          # trainer_profiles, trainer_assignments, exercises,
+                          # workout_plans, workout_days, workout_exercises,
+                          # progress_logs, ...)
 npm run db:seed          # creates test users, member fixtures, plans, a sample
-                          # membership + payment — see below
+                          # membership + payment, an exercise library, a sample
+                          # workout plan, and sample progress logs — see below
 ```
 
 ## 4. Run the app locally
@@ -327,7 +337,58 @@ portal screens all have something to look at immediately.
 > all) shows the block working correctly. See "How trainer management
 > works" below.
 
-## 11. Run the test suite
+## 11. Manually test workout plans & progress
+
+1. Log in as `admin@gym.test` → `/admin/exercises`. You should see the
+   seeded 6-exercise library (Bench Press, Incline Dumbbell Press, Tricep
+   Pushdown, Squat, Leg Press, Walking Lunges). Create a new exercise →
+   it appears in the list. Edit it → changes save. Deactivate it → it's
+   flagged inactive but not deleted (workout plans that already
+   reference it keep working).
+2. Log in as `trainer@gym.test` (Deepak Kapoor) → `/trainer/exercises/new`
+   → create a new exercise → it's immediately usable when building a
+   workout plan. As that trainer, try editing an exercise created by
+   *another* trainer or by admin → blocked (only admin or the original
+   creator may edit — see "How workout & progress tracking works" below).
+3. From `/trainer/members`, open `member@gym.test` (assigned to Deepak)
+   → "Workout plans" section → the seeded "Foundations Block 1" plan is
+   visible with its two days (Monday — Push, Wednesday — Legs) and each
+   day's exercises with sets/reps/weight/rest.
+4. Create a new workout plan for that member → name, description, start
+   date, optional end date → it's created with `status: ACTIVE` and
+   `trainerId` set to the logged-in trainer automatically (never
+   client-supplied). Add a workout day (e.g. "Friday — Pull") → add an
+   exercise to it with sets/reps/weight/rest/notes → both appear on the
+   plan detail page immediately. Try adding an exercise with a
+   non-existent `exerciseId` (e.g. by tampering with the form) → rejected
+   with a validation/not-found error, not a broken row.
+5. As Deepak, try opening `/trainer/members/<a member NOT assigned to
+   Deepak>/workout-plans/new` or `/trainer/workout-plans/<a plan
+   belonging to another trainer's member>` directly → blocked (verify via
+   the service tests or by confirming the member's name/plan data never
+   appears in the response body — see the streaming-redirect testing note
+   under "Manually test trainer management & assignment" above; the same
+   caveat applies here).
+6. Log in as `member@gym.test` → `/member/workout-plans` → see
+   "Foundations Block 1," read-only (no edit controls anywhere on this
+   page). Open it → both days and every exercise's sets/reps/weight/rest
+   are visible. Try `/member/workout-plans/<another member's plan id>`
+   directly → blocked, no plan data leaks.
+7. As `member@gym.test`, go to `/member/progress` → see the two seeded
+   `WEIGHT_KG` entries and one `BODY_FAT_PERCENT` entry. Log a new entry
+   → pick "Custom metric" without filling in the custom label → rejected
+   ("a custom label is required for a custom metric"). Fill in the label
+   → succeeds. Log a `BODY_FAT_PERCENT` value over 100 → rejected. Log a
+   normal `WEIGHT_KG` value → appears at the top of the history
+   immediately, newest first.
+8. As `trainer@gym.test`, confirm there is no UI or route for recording
+   progress on a member's behalf — progress is member-self-only (see
+   "How workout & progress tracking works" below). As admin, open
+   `/admin/members/[id]` for a member with logged progress → the read-only
+   "Progress" section shows their history; there's no admin edit control
+   there either.
+
+## 12. Run the test suite
 
 ```bash
 npm run test
@@ -336,14 +397,16 @@ npm run test
 Runs Vitest against the service layer (`member.service.ts`,
 `plan.service.ts`, `membership.service.ts`, `payment.service.ts`,
 `attendance.service.ts`, `trainer.service.ts`, `assignment.service.ts`,
-`trainer-portal.service.ts`), the pure date/status logic
-(`lib/membership.ts`, `lib/date.ts`), the authorization policies
-(`policies.ts`), and every Zod validation schema — 243 tests, using a
-mocked Prisma client, no database connection needed. See "How trainer
-management works," "How attendance works," and "How plans, memberships &
-payments work" below for what these tests do and don't cover.
+`trainer-portal.service.ts`, `exercise.service.ts`, `workout.service.ts`,
+`progress.service.ts`), the pure date/status logic (`lib/membership.ts`,
+`lib/date.ts`), the authorization policies (`policies.ts`), and every Zod
+validation schema — 348 tests, using a mocked Prisma client, no database
+connection needed. See "How trainer management works," "How workout &
+progress tracking works," "How attendance works," and "How plans,
+memberships & payments work" below for what these tests do and don't
+cover.
 
-## 12. Production build
+## 13. Production build
 
 ```bash
 npm run build
@@ -632,6 +695,62 @@ build, and fails loudly on type errors since TypeScript strict mode is on.
   "policies.ts has zero framework/DB dependencies" while still letting
   one rule genuinely depend on data.
 
+## How workout & progress tracking works
+
+- **The exercise library is shared, not per-trainer.** `Exercise` rows
+  are global (name, muscle group, description, instructions, active
+  flag) and any active exercise can be added to any workout day by any
+  trainer, regardless of who created it. `createdByUserId` exists only
+  to gate *editing* (`canEditExercise`: admin, or the original creator —
+  a trainer can't silently rewrite another trainer's exercise
+  definition), not to scope who can *use* it in a plan.
+- **A workout plan's `trainerId` is always the acting trainer, never
+  client-supplied.** `createWorkoutPlan` is `TRAINER`-only — deliberately
+  not usable by `ADMIN` — because a plan's trainer field represents a
+  real coaching relationship, and an admin has no trainer identity of
+  their own to put there. Creating a plan also requires an active
+  assignment to that member (reusing the same
+  `isMemberAssignedToTrainer` check Phase 5 built, not a new one), so a
+  trainer can never author a plan for a member who isn't theirs.
+- **Days and exercises are owned by the plan, not independently
+  authorizable.** Adding/editing/removing a `WorkoutDay` or
+  `WorkoutExercise` re-derives its parent plan's member and trainer and
+  runs the exact same `canManageWorkoutPlanFor` check the plan itself
+  uses — there's no separate, weaker check for "just adding one exercise
+  to an existing plan."
+- **Adding an exercise to a day validates the `exerciseId` server-side**
+  before writing the row, rejecting a nonexistent or tampered id with a
+  clear error rather than leaving an orphaned foreign key or letting
+  Prisma throw a raw constraint error up to the UI.
+- **`WorkoutExercise.weightKg` is intentionally a `Float`, not an integer
+  minor-unit column like every money field elsewhere in this codebase.**
+  It's a physical measurement (kilograms), not currency — the
+  integer-minor-units rule in this README exists specifically to avoid
+  floating-point rounding in financial arithmetic, which doesn't apply
+  here; a small amount of float imprecision in a displayed "60.5 kg" is
+  harmless.
+- **Progress logs are member-self-only, both to write and (for a member)
+  to read.** `recordProgress` takes no target-member parameter beyond the
+  acting member's own id — there's no code path, admin or trainer,
+  that can write a progress entry on a member's behalf. `ADMIN` and an
+  assigned `TRAINER` can *view* a member's progress history
+  (`canViewProgressFor`) for coaching/oversight purposes, matching the
+  same reduced-visibility pattern trainers get elsewhere, but neither can
+  edit or delete an entry.
+- **Deliberately minimal health data.** `ProgressMetric` is a fixed enum
+  (body weight, body fat %, four body measurements, or `CUSTOM` with a
+  short free-text label) — no blood pressure, heart rate, medical
+  history, or other clinical data is collected anywhere in this phase,
+  per the explicit "do not collect unnecessary health information"
+  instruction. `BODY_FAT_PERCENT` is capped at 100 at the validation
+  layer as a basic sanity bound, not a medical-grade constraint.
+- **No workout/progress data crosses into the payment or attendance
+  services**, and vice versa — `workout.service.ts` and
+  `progress.service.ts` are new, additive files that only read
+  `assignment.service.ts`'s shared `isMemberAssignedToTrainer` helper;
+  every prior phase's service kept its existing tests passing
+  unmodified.
+
 ## Known simplifications (intentional, for a learning project)
 
 - **No self-serve registration.** Only the seed script creates users right
@@ -724,6 +843,29 @@ build, and fails loudly on type errors since TypeScript strict mode is on.
   be scoped narrowly. There's no trainer-initiated check-in/out or
   membership action either, even for an assigned member — those remain
   member-self-service (attendance) or admin-only (memberships/payments).
+- **No exercise categories/tags beyond a single muscle-group field**, no
+  exercise images/videos, and no set-by-set actual-vs-planned tracking
+  (a `WorkoutExercise` row is the *prescription* — sets/reps/weight/rest
+  a trainer assigned — not a per-session log of what was actually done).
+  A "workout session log" distinct from the plan itself isn't built;
+  that's a natural extension of `ProgressLog` rather than a schema
+  change, if it's ever needed.
+- **No admin- or trainer-initiated progress entries.** Progress is
+  strictly member-self-reported (see "How workout & progress tracking
+  works"); there's no "record this member's weigh-in for them" flow even
+  for an assigned trainer, matching the instruction to avoid collecting
+  more health data/oversight than necessary.
+- **No workout plan templates or duplication.** Every plan is built from
+  scratch, day by day, exercise by exercise; there's no "copy this plan
+  for another member" or reusable template library yet.
+- **A workout plan has no admin-facing create/edit UI** — admins can view
+  a member's plans and progress (read-only, from the member detail page)
+  but plan authorship stays trainer-only, matching the "a plan's
+  trainerId must genuinely be a trainer" rule above.
+- **No progress charts/trends** — `/member/progress` is a plain
+  chronological list. Visualizing a metric over time is a UI-only
+  addition later, not a data model change (`ProgressLog` already has
+  everything a chart would need: metric, date, value).
 
 ## Project structure
 
@@ -748,14 +890,20 @@ src/
         history/            search + date-range filter, paginated
       trainers/           list, actions.ts (create/edit/activate/deactivate)
         new/, [id]/           create / detail+edit+toggle+assigned-members roster
+      exercises/          global exercise library: list, actions.ts, new/, [id]/
     trainer/            layout.tsx (requireRole TRAINER) + dashboard/
       members/             own assigned-members roster (canViewTrainerRoster: self only)
         [id]/                  an assigned member's reduced profile/attendance/membership
+          workout-plans/         new/ (create a plan for this assigned member)
+      exercises/            new/ (add a library exercise)
+      workout-plans/          [id]/ (plan detail: edit, status, days, exercises)
     member/              layout.tsx (requireRole MEMBER) + dashboard/
       profile/             self-service profile: view/edit own data only
       membership/           own current status + history, nobody else's
       payments/             own payment history, nobody else's
       attendance/            check-in/out button, today's status, own history
+      workout-plans/          own plans, read-only: list + [id] detail
+      progress/               own progress log: history + record-new form
     dashboard/            role router — redirects to the right area
     forbidden/             shown on a role mismatch
     api/
@@ -770,6 +918,9 @@ src/
     payments/          RecordPaymentForm
     attendance/        CheckInOutButton
     trainers/          TrainerForm (admin create/edit), AssignTrainerForm
+    exercises/         ExerciseForm (admin/trainer create/edit)
+    workouts/          WorkoutPlanForm, AddWorkoutDayForm, AddWorkoutExerciseForm
+    progress/          ProgressLogForm (member self-record)
   server/
     db.ts              Prisma client singleton
     prisma-errors.ts   isUniqueConstraintError() helper
@@ -785,17 +936,27 @@ src/
                                     *assigned* member (profile/attendance/membership
                                     status, never payments) — see "How trainer
                                     management works"
+      exercise.service.ts           Exercise library CRUD + authorization
+                                    (canEditExercise: admin or original creator)
+      workout.service.ts            Workout plan/day/exercise CRUD + authorization
+                                    (trainer-only creation, assignment-checked)
+      progress.service.ts           Member-self progress recording + admin/trainer
+                                    read access — see "How workout & progress
+                                    tracking works"
   lib/
     auth/              config.ts (edge-safe) / auth.ts (Node, full config)
                        / session.ts (requireUser, requireRole)
                        / policies.ts (canManageMembers, canManageFinancialRecords,
                                       canRecordAttendanceFor, canManageTrainers,
-                                      canTrainerAccessMember, ...)
+                                      canTrainerAccessMember, canManageWorkoutPlanFor,
+                                      canViewWorkoutPlanFor, canRecordProgressFor,
+                                      canViewProgressFor, ...)
                        / password.ts / actions.ts (logout)
     validations/       Zod schemas (auth.ts, member.ts, plan.ts, membership.ts,
-                       payment.ts, trainer.ts, assignment.ts) + shared.ts (the one
-                       place the FormData-null-vs-empty-string normalization lives —
-                       see "Notes on dependency versions" for why that matters)
+                       payment.ts, trainer.ts, assignment.ts, exercise.ts,
+                       workout.ts, progress.ts) + shared.ts (the one place the
+                       FormData-null-vs-empty-string normalization lives — see
+                       "Notes on dependency versions" for why that matters)
     service-error.ts    maps thrown domain errors -> notFound()/redirect()
     rate-limit.ts       in-memory login rate limiter
     date.ts             toDateInputValue(), startOfDay() (UTC day boundary,
@@ -813,12 +974,15 @@ src/
 prisma/
   schema.prisma        User, MemberProfile, MembershipPlan, Membership,
                        Payment, Attendance, TrainerProfile,
-                       TrainerAssignment models; Role/UserStatus/
+                       TrainerAssignment, Exercise, WorkoutPlan, WorkoutDay,
+                       WorkoutExercise, ProgressLog models; Role/UserStatus/
                        MembershipStatus/PaymentMethod/PaymentStatus/
-                       AttendanceMethod/AssignmentStatus enums
+                       AttendanceMethod/AssignmentStatus/WorkoutPlanStatus/
+                       ProgressMetric enums
   seed.ts              Core test users + 22 member fixtures + 2 trainer
                        fixtures + 3 plans + a sample membership/payment +
-                       sample trainer assignments
+                       sample trainer assignments + a 6-exercise library +
+                       a sample workout plan + sample progress logs
   migrations/           ...including hand-written partial unique indexes
                         for Attendance and TrainerAssignment (see "How
                         attendance works" / "How trainer management works")
@@ -876,5 +1040,4 @@ vitest.config.mts      Vitest configuration
 
 ## Roadmap
 
-Workout plans → progress tracking → dashboards & analytics →
-notifications → hardening.
+Dashboards & analytics → notifications → hardening.

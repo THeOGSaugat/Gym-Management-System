@@ -152,3 +152,97 @@ export function canTrainerAccessMember(actor: Actor, isAssigned: boolean): boole
   if (actor.role === "ADMIN") return true;
   return actor.role === "TRAINER" && isAssigned;
 }
+
+/**
+ * Only admins manage the *whole* exercise catalog (edit/deactivate any
+ * entry, regardless of who created it). See canCreateExercise and
+ * canEditExercise for the narrower trainer permissions.
+ */
+export function canManageExerciseLibrary(actor: Actor): boolean {
+  return actor.role === "ADMIN";
+}
+
+/**
+ * Both admins and trainers can add a new exercise to the shared catalog
+ * — the library needs to grow as trainers build programs, so this isn't
+ * gated behind admin-only the way canManageExerciseLibrary is.
+ */
+export function canCreateExercise(actor: Actor): boolean {
+  return actor.role === "ADMIN" || actor.role === "TRAINER";
+}
+
+/**
+ * Editing or deactivating an *existing* entry: an admin (any entry), or
+ * the trainer who created it (their own entries only) — never another
+ * trainer's. This is what keeps a shared, ever-growing catalog from
+ * becoming an ungoverned free-for-all: anyone can add to it, but only
+ * its creator (or an admin) can change it afterward.
+ */
+export function canEditExercise(actor: Actor, createdByUserId: string): boolean {
+  if (actor.role === "ADMIN") return true;
+  return actor.role === "TRAINER" && actor.id === createdByUserId;
+}
+
+/** Both admins and trainers can browse the catalog — they're the only roles that build workout plans. */
+export function canViewExerciseLibrary(actor: Actor): boolean {
+  return actor.role === "ADMIN" || actor.role === "TRAINER";
+}
+
+/**
+ * Who can create/edit a workout plan, add or remove its days/exercises,
+ * or change its status: an admin, or the *assigned* trainer for that
+ * specific member — never an unassigned trainer, and never the member
+ * themself (a member views their own plan; only their trainer or an
+ * admin builds it). Same "pass in the already-known assignment fact"
+ * shape as canTrainerAccessMember, for the same reason: the assignment
+ * lookup belongs in the service layer, not here.
+ */
+export function canManageWorkoutPlanFor(actor: Actor, isAssignedTrainer: boolean): boolean {
+  if (actor.role === "ADMIN") return true;
+  return actor.role === "TRAINER" && isAssignedTrainer;
+}
+
+/**
+ * Who can *view* a member's workout plan(s): an admin, that member
+ * viewing their own, or their assigned trainer. Broader than
+ * canManageWorkoutPlanFor by exactly one case (the member themself),
+ * mirroring how canViewFinancialRecordsFor is broader than
+ * canManageFinancialRecords.
+ */
+export function canViewWorkoutPlanFor(
+  actor: Actor,
+  targetMemberId: string,
+  isAssignedTrainer: boolean,
+): boolean {
+  if (actor.role === "ADMIN") return true;
+  if (actor.role === "MEMBER") return actor.id === targetMemberId;
+  return actor.role === "TRAINER" && isAssignedTrainer;
+}
+
+/**
+ * Who can record a new progress log entry for a member: only that
+ * member, themselves. Mirrors canRecordAttendanceFor's shape and
+ * reasoning exactly — there is no trainer-assisted or admin-assisted
+ * recording yet, matching Phase 5's precedent that a trainer's access to
+ * an assigned member's data is read-only unless a requirement explicitly
+ * says otherwise (this one doesn't).
+ */
+export function canRecordProgressFor(actor: Actor, targetMemberId: string): boolean {
+  return actor.role === "MEMBER" && actor.id === targetMemberId;
+}
+
+/**
+ * Who can *view* a member's progress history: an admin, that member
+ * viewing their own, or their assigned trainer. Same shape as
+ * canViewWorkoutPlanFor — progress data sits at the same privacy level
+ * as workout plans, not the stricter payments-never-for-trainers level.
+ */
+export function canViewProgressFor(
+  actor: Actor,
+  targetMemberId: string,
+  isAssignedTrainer: boolean,
+): boolean {
+  if (actor.role === "ADMIN") return true;
+  if (actor.role === "MEMBER") return actor.id === targetMemberId;
+  return actor.role === "TRAINER" && isAssignedTrainer;
+}

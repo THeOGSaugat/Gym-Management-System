@@ -2,6 +2,7 @@ import { db } from "@/server/db";
 import { canTrainerAccessMember, type Actor } from "@/lib/auth/policies";
 import { ForbiddenError, NotFoundError } from "@/lib/errors";
 import { computeEffectiveStatus, isMembershipCurrentlyActive } from "@/lib/membership";
+import { isMemberAssignedToTrainer } from "@/server/services/assignment.service";
 
 /**
  * The trainer-facing read surface for an *assigned* member: reduced
@@ -22,19 +23,13 @@ import { computeEffectiveStatus, isMembershipCurrentlyActive } from "@/lib/membe
  * Payment row for any member, assigned or not.
  */
 
-async function findActiveAssignment(trainerId: string, memberId: string) {
-  return db.trainerAssignment.findFirst({
-    where: { trainerId, memberId, status: "ACTIVE" },
-  });
-}
-
 async function requireAccess(actor: Actor, memberId: string) {
   if (actor.role === "ADMIN") return;
 
-  const assignment =
-    actor.role === "TRAINER" ? await findActiveAssignment(actor.id, memberId) : null;
+  const isAssigned =
+    actor.role === "TRAINER" ? await isMemberAssignedToTrainer(memberId, actor.id) : false;
 
-  if (!canTrainerAccessMember(actor, !!assignment)) {
+  if (!canTrainerAccessMember(actor, isAssigned)) {
     throw new ForbiddenError("You can only view members currently assigned to you.");
   }
 }

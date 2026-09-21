@@ -104,6 +104,17 @@ function addDays(date: Date, days: number): Date {
   return result;
 }
 
+// A small starter exercise catalog, enough to build a two-day plan and
+// to test the picker in the "add exercise to a day" form.
+const EXERCISES: Array<{ name: string; muscleGroup: string }> = [
+  { name: "Bench Press", muscleGroup: "Chest" },
+  { name: "Incline Dumbbell Press", muscleGroup: "Chest" },
+  { name: "Tricep Pushdown", muscleGroup: "Triceps" },
+  { name: "Squat", muscleGroup: "Legs" },
+  { name: "Leg Press", muscleGroup: "Legs" },
+  { name: "Walking Lunges", muscleGroup: "Legs" },
+];
+
 async function main() {
   const coreUserIds: Partial<Record<Role, string>> = {};
 
@@ -265,6 +276,127 @@ async function main() {
     }
   }
 
+  // Exercise catalog, attributed to the core trainer (an admin could
+  // just as validly have created these — the fixture data just needs an
+  // owner, and the trainer is the more realistic one in practice).
+  const exerciseIds: Record<string, string> = {};
+  if (coreTrainerId) {
+    for (const exercise of EXERCISES) {
+      const existing = await db.exercise.findFirst({ where: { name: exercise.name } });
+      const row = existing
+        ? existing
+        : await db.exercise.create({
+            data: { ...exercise, createdByUserId: coreTrainerId },
+          });
+      exerciseIds[exercise.name] = row.id;
+    }
+  }
+
+  // A sample workout plan for member@gym.test, built by their assigned
+  // trainer (Deepak Kapoor — see the assignment above), with two days
+  // and a few exercises each, so /member/workout-plans,
+  // /trainer/members/[id], and the admin member-detail page's read-only
+  // summary all have something real to show immediately.
+  if (deepakId && coreMemberId) {
+    const existingPlan = await db.workoutPlan.findFirst({
+      where: { memberId: coreMemberId, trainerId: deepakId },
+    });
+
+    if (!existingPlan) {
+      const plan = await db.workoutPlan.create({
+        data: {
+          memberId: coreMemberId,
+          trainerId: deepakId,
+          name: "Foundations Block 1",
+          description: "A 4-week introductory strength block.",
+          status: "ACTIVE",
+        },
+      });
+
+      const pushDay = await db.workoutDay.create({
+        data: { planId: plan.id, label: "Monday — Push", orderIndex: 0 },
+      });
+      const legDay = await db.workoutDay.create({
+        data: { planId: plan.id, label: "Wednesday — Legs", orderIndex: 1 },
+      });
+
+      const pushExercises = [
+        { name: "Bench Press", sets: 4, reps: 8, weightKg: 60 },
+        { name: "Incline Dumbbell Press", sets: 3, reps: 10, weightKg: 22 },
+        { name: "Tricep Pushdown", sets: 3, reps: 12, weightKg: 25 },
+      ];
+      for (const [index, ex] of pushExercises.entries()) {
+        const exerciseId = exerciseIds[ex.name];
+        if (!exerciseId) continue;
+        await db.workoutExercise.create({
+          data: {
+            workoutDayId: pushDay.id,
+            exerciseId,
+            orderIndex: index,
+            sets: ex.sets,
+            reps: ex.reps,
+            weightKg: ex.weightKg,
+            restSeconds: 90,
+          },
+        });
+      }
+
+      const legExercises = [
+        { name: "Squat", sets: 4, reps: 6, weightKg: 80 },
+        { name: "Leg Press", sets: 3, reps: 10, weightKg: 120 },
+        { name: "Walking Lunges", sets: 3, reps: 12, weightKg: 20 },
+      ];
+      for (const [index, ex] of legExercises.entries()) {
+        const exerciseId = exerciseIds[ex.name];
+        if (!exerciseId) continue;
+        await db.workoutExercise.create({
+          data: {
+            workoutDayId: legDay.id,
+            exerciseId,
+            orderIndex: index,
+            sets: ex.sets,
+            reps: ex.reps,
+            weightKg: ex.weightKg,
+            restSeconds: 120,
+          },
+        });
+      }
+    }
+  }
+
+  // A couple of progress entries for member@gym.test, so /member/progress
+  // and the trainer/admin read-only summaries have real history.
+  if (coreMemberId) {
+    const existingProgress = await db.progressLog.findFirst({ where: { memberId: coreMemberId } });
+    if (!existingProgress) {
+      await db.progressLog.createMany({
+        data: [
+          {
+            memberId: coreMemberId,
+            recordedByUserId: coreMemberId,
+            metric: "WEIGHT_KG",
+            value: 84.2,
+            recordedAt: addDays(new Date(), -28),
+          },
+          {
+            memberId: coreMemberId,
+            recordedByUserId: coreMemberId,
+            metric: "WEIGHT_KG",
+            value: 82.5,
+            recordedAt: addDays(new Date(), -7),
+          },
+          {
+            memberId: coreMemberId,
+            recordedByUserId: coreMemberId,
+            metric: "BODY_FAT_PERCENT",
+            value: 21.5,
+            recordedAt: addDays(new Date(), -7),
+          },
+        ],
+      });
+    }
+  }
+
   console.log("Seeded core test users:");
   for (const seedUser of CORE_USERS) {
     console.log(`  ${seedUser.role.padEnd(8)} ${seedUser.email}  /  ${seedUser.password}`);
@@ -274,6 +406,9 @@ async function main() {
   console.log(`Seeded ${PLANS.length} membership plans`);
   console.log("Seeded an active Monthly membership + payment for member@gym.test");
   console.log("Seeded trainer assignments: member@gym.test -> Deepak Kapoor; Priya/Liam -> trainer@gym.test");
+  console.log(`Seeded ${EXERCISES.length} exercises`);
+  console.log("Seeded a 2-day workout plan (Foundations Block 1) for member@gym.test");
+  console.log("Seeded 3 progress log entries for member@gym.test");
 }
 
 main()

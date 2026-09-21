@@ -57,6 +57,18 @@ model User {
   // As the admin who created the assignment (audit trail, not ownership).
   assignmentsCreated TrainerAssignment[] @relation("AssignmentCreatedBy")
 
+  exercisesCreated Exercise[] @relation("ExerciseCreatedBy")
+
+  // As the member/trainer on a workout plan.
+  workoutPlansAsMember  WorkoutPlan[] @relation("MemberWorkoutPlans")
+  workoutPlansAsTrainer WorkoutPlan[] @relation("TrainerWorkoutPlans")
+
+  // As the member on their own progress logs, and as whoever recorded one
+  // (always the member themself today — see progress.service.ts — but kept
+  // separate from ownership for the same reason Payment.recordedByUserId is).
+  progressLogs         ProgressLog[] @relation("MemberProgressLogs")
+  progressLogsRecorded ProgressLog[] @relation("ProgressLogRecordedBy")
+
   @@map("users")
 }
 
@@ -339,4 +351,165 @@ model TrainerAssignment {
   @@index([memberId, status])
   @@index([trainerId, status])
   @@map("trainer_assignments")
+}
+
+// A shared catalog, not per-trainer data — the same "Bench Press" exists
+// once, usable across every workout plan, not re-entered per trainer.
+// Admins manage the whole catalog; a trainer can add new entries (the
+// library needs to grow as programs get built) but can only edit/
+// deactivate ones *they* created — see canEditExercise in policies.ts.
+// Deactivating (not deleting) matches every other catalog in this app
+// (MembershipPlan): an exercise already used in a workout plan must
+// survive, so existing plans keep showing it.
+model Exercise {
+  id           String  @id @default(cuid())
+  name         String
+  muscleGroup  String?
+  description  String?
+  instructions String?
+  isActive     Boolean @default(true)
+
+  createdByUserId String
+  createdBy       User   @relation("ExerciseCreatedBy", fields: [createdByUserId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workoutExercises WorkoutExercise[]
+
+  @@index([isActive])
+  @@map("exercises")
+}
+
+enum WorkoutPlanStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+// A trainer's program for one assigned member. Unlike Membership/Payment,
+// this has no snapshot fields — a workout plan isn't a purchase with
+// terms that must survive a later price change, it's a living document
+// the trainer is expected to keep current for as long as it's ACTIVE.
+model WorkoutPlan {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+
+  memberId String
+  member   User   @relation("MemberWorkoutPlans", fields: [memberId], references: [id], onDelete: Cascade)
+
+  trainerId String
+  trainer   User   @relation("TrainerWorkoutPlans", fields: [trainerId], references: [id], onDelete: Cascade)
+
+  startDate DateTime  @default(now())
+  endDate   DateTime?
+  status    WorkoutPlanStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  days WorkoutDay[]
+
+  @@index([memberId, status])
+  @@index([trainerId])
+  @@map("workout_plans")
+}
+
+// One training day within a plan (e.g. "Monday" or "Push Day" — a free-
+// text label, not a fixed weekday enum, since plenty of real programs are
+// organized by muscle group/session type rather than calendar day).
+model WorkoutDay {
+  id     String @id @default(cuid())
+  planId String
+  plan   WorkoutPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  label      String
+  orderIndex Int     @default(0)
+  notes      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  exercises WorkoutExercise[]
+
+  @@index([planId])
+  @@map("workout_days")
+}
+
+// One exercise prescribed within a workout day, with the sets/reps/
+// weight/rest actually assigned — distinct from Exercise, which is just
+// the catalog entry ("Bench Press" exists once; how heavy a given member
+// lifts it is per-plan, per-day data). weightKg is a plain float, unlike
+// money's integer-minor-units rule: it's a measurement a trainer/member
+// eyeballs and edits by hand, never summed or compared for equality the
+// way currency is, so float rounding isn't a real risk here.
+model WorkoutExercise {
+  id           String     @id @default(cuid())
+  workoutDayId String
+  workoutDay   WorkoutDay @relation(fields: [workoutDayId], references: [id], onDelete: Cascade)
+
+  exerciseId String
+  exercise   Exercise @relation(fields: [exerciseId], references: [id])
+
+  orderIndex  Int     @default(0)
+  sets        Int
+  reps        Int
+  weightKg    Float?
+  restSeconds Int?
+  notes       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workoutDayId])
+  @@map("workout_exercises")
+}
+
+// What "metric" means for a ProgressLog row. A closed set, deliberately —
+// "do not collect unnecessary health information" means no freeform
+// medical-history fields; CUSTOM is the one escape hatch for something a
+// trainer/member wants to track that isn't in this list (e.g. resting
+// heart rate), carrying a short label rather than opening up arbitrary
+// health data collection.
+enum ProgressMetric {
+  WEIGHT_KG
+  BODY_FAT_PERCENT
+  CHEST_CM
+  WAIST_CM
+  HIPS_CM
+  ARM_CM
+  THIGH_CM
+  CUSTOM
+}
+
+// Append-only by convention (like Payment/Attendance): a measurement
+// taken on a date is a historical fact, corrected by logging a new entry
+// with accurate notes, not by editing the old one out from under a
+// progress chart. Always self-recorded by the member today (see
+// progress.service.ts) — recordedByUserId exists for the same audit-
+// trail reason Payment.recordedByUserId does, ready for a future
+// trainer-assisted recording feature without a schema change.
+model ProgressLog {
+  id String @id @default(cuid())
+
+  memberId String
+  member   User   @relation("MemberProgressLogs", fields: [memberId], references: [id], onDelete: Cascade)
+
+  recordedAt  DateTime       @default(now())
+  metric      ProgressMetric
+  // Only meaningful (and required, at the validation layer) when
+  // metric = CUSTOM — the other values are already self-describing.
+  customLabel String?
+  value       Float
+  notes       String?
+
+  recordedByUserId String
+  recordedBy       User   @relation("ProgressLogRecordedBy", fields: [recordedByUserId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([memberId, recordedAt])
+  @@map("progress_logs")
 }

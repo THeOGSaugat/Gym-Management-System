@@ -6,6 +6,8 @@ import {
   getAssignedMemberAttendance,
   getAssignedMemberMembershipStatus,
 } from "@/server/services/trainer-portal.service";
+import { listWorkoutPlansForMember } from "@/server/services/workout.service";
+import { listProgressForMember } from "@/server/services/progress.service";
 import { handlePageError } from "@/lib/service-error";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +32,12 @@ const MEMBERSHIP_STATUS_VARIANT = {
   CANCELLED: "outline",
 } as const;
 
+const PLAN_STATUS_VARIANT = {
+  ACTIVE: "default",
+  COMPLETED: "outline",
+  CANCELLED: "outline",
+} as const;
+
 function formatTime(date: Date): string {
   return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
@@ -43,9 +51,11 @@ export default async function TrainerAssignedMemberDetailPage({
   const { id } = await params;
 
   const member = await getAssignedMember(actor, id).catch(handlePageError);
-  const [attendance, membershipStatus] = await Promise.all([
+  const [attendance, membershipStatus, workoutPlans, progressLogs] = await Promise.all([
     getAssignedMemberAttendance(actor, id),
     getAssignedMemberMembershipStatus(actor, id),
+    listWorkoutPlansForMember(actor, id),
+    listProgressForMember(actor, id),
   ]);
 
   return (
@@ -132,6 +142,82 @@ export default async function TrainerAssignedMemberDetailPage({
                     <TableCell className="text-muted-foreground">
                       {record.checkOutAt ? formatTime(record.checkOutAt) : "—"}
                     </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="max-w-xl">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Workout plans</CardTitle>
+          <Button
+            size="sm"
+            nativeButton={false}
+            render={<Link href={`/trainer/members/${id}/workout-plans/new`}>New plan</Link>}
+          />
+        </CardHeader>
+        <CardContent>
+          {workoutPlans.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No workout plans yet.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Dates</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {workoutPlans.map((plan) => (
+                  <TableRow key={plan.id}>
+                    <TableCell className="font-medium">
+                      <Link href={`/trainer/workout-plans/${plan.id}`} className="hover:underline">
+                        {plan.name}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {plan.startDate.toLocaleDateString()}
+                      {plan.endDate ? ` – ${plan.endDate.toLocaleDateString()}` : ""}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={PLAN_STATUS_VARIANT[plan.status]}>{plan.status}</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="max-w-xl">
+        <CardHeader>
+          <CardTitle>Recent progress</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {progressLogs.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No progress logged yet.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Metric</TableHead>
+                  <TableHead>Value</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {progressLogs.slice(0, 10).map((log) => (
+                  <TableRow key={log.id}>
+                    <TableCell className="text-muted-foreground">
+                      {log.recordedAt.toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>{log.metric === "CUSTOM" ? log.customLabel : log.metric}</TableCell>
+                    <TableCell className="font-medium">{log.value}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
