@@ -10,14 +10,17 @@ This repository is being built in phases.
   connection, base layout, error-handling utilities.
 - **Phase 1 (authentication & RBAC)** — done: real login/logout, sessions,
   and server-enforced role separation for ADMIN, TRAINER and MEMBER.
-- Member/trainer management, memberships, payments, attendance, workout
-  plans, dashboards, notifications: not built yet.
+- **Phase 2 (member management)** — done: admin CRUD over member accounts
+  (list/search/filter/create/edit/deactivate), a member self-service
+  profile page, and a Vitest suite covering the service layer.
+- Trainer management, memberships, payments, attendance, workout plans,
+  dashboards, notifications: not built yet.
 
 ## Stack
 
 Next.js (App Router) · TypeScript (strict) · PostgreSQL (Neon) · Prisma ·
 Tailwind CSS · shadcn/ui · Zod · Auth.js v5 (JWT sessions) · bcryptjs ·
-Vercel
+Vitest · Vercel
 
 ## Prerequisites
 
@@ -59,8 +62,8 @@ production.
 
 ```bash
 npx prisma generate      # generates the typed client into src/generated/prisma
-npx prisma migrate dev   # creates the users table (and future tables) in Neon
-npm run db:seed          # creates one test user per role — see below
+npx prisma migrate dev   # creates/updates tables in Neon (users, member_profiles, ...)
+npm run db:seed          # creates test users + member fixtures — see below
 ```
 
 ## 4. Run the app locally
@@ -77,8 +80,12 @@ Open [http://localhost:3000](http://localhost:3000).
 | `/login` | public login form |
 | `/dashboard` | any signed-in user — redirects to their role's dashboard |
 | `/admin/dashboard` | ADMIN only |
+| `/admin/members` | ADMIN only — member list, search, filter, pagination |
+| `/admin/members/new` | ADMIN only — create a member |
+| `/admin/members/[id]` | ADMIN only — view/edit a member, deactivate/reactivate |
 | `/trainer/dashboard` | TRAINER only |
 | `/member/dashboard` | MEMBER only |
+| `/member/profile` | MEMBER only — view/edit **own** profile, nobody else's |
 | `/forbidden` | shown when a signed-in user's role doesn't match the area |
 | `/api/health` | JSON health check (app + database) |
 
@@ -92,10 +99,17 @@ Open [http://localhost:3000](http://localhost:3000).
 | TRAINER | `trainer@gym.test` | `Trainer123!` |
 | MEMBER | `member@gym.test` | `Member123!` |
 
-⚠️ Dev-only. There is no self-serve registration yet (a real gym's admin
-creates accounts — that lands in Phase 2's member/trainer management).
-Never run the seed script against a production database, and never reuse
-these passwords anywhere real.
+...plus 22 additional MEMBER fixtures (password `Member123!` for all of
+them, e.g. `priya.sharma@gym.test`) so the admin member list has enough
+rows to actually exercise search, filtering, and pagination (page size is
+20). One of them (`tomas.alves@gym.test`) is seeded as `SUSPENDED` to test
+the status filter.
+
+⚠️ Dev-only. There is no self-serve registration — a real gym's admin
+creates member accounts through `/admin/members/new` (ADMIN/TRAINER
+accounts still need the seed script, or a future admin UI). Never run the
+seed script against a production database, and never reuse these
+passwords anywhere real.
 
 ## 6. Manually test the auth flow
 
@@ -115,7 +129,45 @@ these passwords anywhere real.
 6. Repeat steps 1–2 for `trainer@gym.test` and `admin@gym.test` to confirm
    each role can only reach its own area.
 
-## 7. Production build
+## 7. Manually test member management
+
+1. Log in as `admin@gym.test` → `/admin/members`. You should see 23
+   members, searchable and filterable, paginated 20/page.
+2. Search `priya` → only Priya Sharma should show. Clear it, filter status
+   to "Suspended" → only Tomás Alves should show.
+3. Click a member → their detail page shows full info and an edit form.
+   Change their phone number and save → redirects back to the detail page
+   with the new value shown.
+4. Click "Add member" → fill in the form with a **new** email → creates
+   the member and redirects to their detail page.
+5. Try creating another member with an **email that already exists** →
+   you should see "An account with this email already exists," not a
+   raw error, and no duplicate row gets created.
+6. On a member's detail page, click "Deactivate" → status badge flips to
+   Suspended. Try logging in as that member (if you know their password,
+   e.g. one of the seeded ones) → login should now fail, because Phase 1's
+   `authorize()` checks `status === "ACTIVE"`. Click "Reactivate" to undo.
+7. Log in as `member@gym.test` → `/member/profile` → edit your phone/
+   address/emergency contact → save → changes persist. Note there's no
+   email or date-of-birth field here (admin-only, by design).
+8. While signed in as that member, try opening
+   `http://localhost:3000/admin/members/<any-other-member-id>` directly →
+   redirected to `/forbidden`, not shown that member's data.
+9. Log in as `trainer@gym.test` → try `/admin/members` → redirected to
+   `/forbidden`. Trainers don't get member-management access automatically.
+
+## 8. Run the test suite
+
+```bash
+npm run test
+```
+
+Runs Vitest against the service layer (`member.service.ts`), the
+authorization policies (`policies.ts`), and the Zod validation schemas,
+using a mocked Prisma client — no database connection needed. See "How
+member management works" below for what these tests do and don't cover.
+
+## 9. Production build
 
 ```bash
 npm run build
@@ -153,6 +205,62 @@ build, and fails loudly on type errors since TypeScript strict mode is on.
   Prisma and bcrypt and cannot run outside Node). This is Auth.js's own
   documented pattern for database-backed credentials + middleware/proxy.
 
+## How member management works
+
+- **`MemberProfile` is 1:1 with `User`**, holding only member-specific
+  fields (date of birth, address, emergency contact, join date, a
+  human-friendly `memberNumber`). Shared contact info (`phone`) stays on
+  `User` rather than being duplicated per role-profile table. Account
+  status (active/suspended) also stays on `User` — there's no separate
+  "membership status" yet, since no `Membership`/`MembershipPlan` model
+  exists until Phase 3. The member detail/profile pages say this
+  explicitly rather than implying more exists than does.
+- **The invariant "a MEMBER has exactly one MemberProfile" is enforced in
+  the service layer** (`createMember` always creates both rows together,
+  in one Prisma call), not by the database schema — Prisma can't express
+  "this relation is required only when a sibling column equals X."
+- **Authorization is checked twice, deliberately:**
+  1. Pages call `requireRole()` (Layer 1/2, gates navigation — e.g. only
+     an ADMIN session can render `/admin/members` at all).
+  2. Every function in `src/server/services/member.service.ts` re-checks
+     via `src/lib/auth/policies.ts` and throws `ForbiddenError` if it
+     fails — independent of whatever called it. `getMember`, for
+     instance, refuses a MEMBER actor viewing any id but their own, and
+     this is checked *before* the database is even queried.
+  A page-level check alone would only protect that one URL. The service
+  check protects the operation, however it's invoked — directly, from a
+  different future page, or from a Server Action bypassing the page's
+  layout tree entirely.
+- **Server Actions independently call `requireRole()` too** (see
+  `src/app/admin/members/actions.ts`), not just the pages whose forms
+  submit to them — a Server Action is its own POST endpoint and doesn't
+  inherit a page's access checks for free.
+- **`updateOwnProfile` has no target-user parameter at all** — it always
+  writes to `actor.id`. That's not an authorization check that could be
+  forgotten; the function is simply incapable of touching another user's
+  row, by its signature.
+- **Mass assignment is avoided structurally**: Server Actions read only
+  the specific named fields off `FormData` (e.g.
+  `formData.get("fullName")`) and pass them through a Zod schema before
+  they ever reach Prisma. Nothing ever spreads raw form/request data into
+  a `db.user.update()` call, so a self-service request can't smuggle in
+  `role` or `status` even if a client crafted one by hand.
+- **Duplicate email handling is two-layered**: an explicit `findUnique`
+  pre-check (for a clean "An account with this email already exists"
+  message) plus a catch on Prisma's `P2002` unique-constraint error code
+  (`src/server/prisma-errors.ts`) as defense-in-depth against the race
+  where two requests pass the pre-check simultaneously.
+- **Tests use a mocked Prisma client**
+  (`src/test/prisma-mock.ts`, via `vitest-mock-extended`), not a live
+  database — they verify business logic (who's allowed to do what, what
+  gets sent to Prisma, how errors map) fast and without needing a second
+  database. This means they do **not** verify the real unique-index
+  constraint itself, real cascade-delete behavior, or real query
+  correctness against Postgres — those were checked by hand against Neon
+  during Phase 2 development (see the manual testing steps above). A
+  future phase could add integration tests against a real (branched or
+  local) database if that gap starts to matter.
+
 ## Known simplifications (intentional, for a learning project)
 
 - **No self-serve registration.** Only the seed script creates users right
@@ -173,6 +281,16 @@ build, and fails loudly on type errors since TypeScript strict mode is on.
   it.
 - **No password reset flow yet** — needs transactional email, which isn't
   wired up. Coming with Phase 9 (notifications) or sooner if needed earlier.
+- **Admin sets a member's initial password directly** when creating their
+  account (no invite-by-email flow, since there's no email infra yet).
+  There's no forced password-change-on-first-login either — the member is
+  simply expected to be told to change it.
+- **Only MEMBER accounts have an admin-facing creation UI.** ADMIN and
+  TRAINER accounts still only come from the seed script — building
+  trainer management is explicitly out of scope for Phase 2.
+- **No hard delete for members**, only deactivate (status → SUSPENDED).
+  This matches the architecture doc's stance that financial/activity
+  history must survive — appropriate even before that history exists.
 
 ## Project structure
 
@@ -181,8 +299,12 @@ src/
   app/
     login/            Login page, form, server action
     admin/             layout.tsx (requireRole ADMIN) + dashboard/
+      members/           list (search/filter/paginate), actions.ts
+        new/                create-member page
+        [id]/                member detail: view, edit, deactivate
     trainer/            layout.tsx (requireRole TRAINER) + dashboard/
     member/              layout.tsx (requireRole MEMBER) + dashboard/
+      profile/             self-service profile: view/edit own data only
     dashboard/            role router — redirects to the right area
     forbidden/             shown on a role mismatch
     api/
@@ -191,22 +313,32 @@ src/
   components/
     ui/                shadcn/ui primitives
     layout/            SiteHeader (public), AppHeader (signed-in areas)
-  server/              Server-only code: Prisma client (db.ts)
+    members/           MemberForm (admin create/edit), SelfProfileForm
+  server/
+    db.ts              Prisma client singleton
+    prisma-errors.ts   isUniqueConstraintError() helper
+    services/
+      member.service.ts  All member business logic + authorization
   lib/
     auth/              config.ts (edge-safe) / auth.ts (Node, full config)
                        / session.ts (requireUser, requireRole)
+                       / policies.ts (canManageMembers, canViewMember, ...)
                        / password.ts / actions.ts (logout)
-    validations/       Zod schemas
+    validations/       Zod schemas (auth.ts, member.ts)
+    service-error.ts    maps thrown domain errors -> notFound()/redirect()
     rate-limit.ts       in-memory login rate limiter
+    date.ts             toDateInputValue() for <input type="date">
     errors.ts / api-response.ts
   types/               next-auth.d.ts (session/JWT type augmentation)
+  test/                prisma-mock.ts, setup.ts (Vitest + mocked Prisma)
   generated/prisma/    Generated Prisma client (gitignored)
   proxy.ts             Route protection (Next.js 16's "Proxy", formerly
                        "middleware")
 prisma/
-  schema.prisma        User model, Role/UserStatus enums
-  seed.ts              Creates 1 test user per role
+  schema.prisma        User, MemberProfile models; Role/UserStatus enums
+  seed.ts              Core test users + 22 member fixtures
 prisma.config.ts       Prisma CLI configuration
+vitest.config.mts      Vitest configuration
 ```
 
 ## Notes on dependency versions
@@ -227,9 +359,13 @@ prisma.config.ts       Prisma CLI configuration
   by `prisma`, neither reachable from application code since we only use
   the PostgreSQL connector). Worth revisiting on the next Prisma patch
   release, not urgent.
+- **`@types/node` was bumped from `^20` to `^22`** in Phase 2 — Vitest 5
+  requires `@types/node@^22 || >=24`, and `^22` is also the correct match
+  for this repo's actual Node 22 LTS deploy target (`^20` was already a
+  mismatch, just one nothing had surfaced yet).
 
 ## Roadmap
 
-Phase 2 (member & trainer management) → memberships & expiry → payments →
-attendance → trainer assignment & workouts → progress tracking →
-dashboards & analytics → notifications → hardening.
+Trainer management → memberships & expiry → payments → attendance →
+trainer assignment & workouts → progress tracking → dashboards &
+analytics → notifications → hardening.
