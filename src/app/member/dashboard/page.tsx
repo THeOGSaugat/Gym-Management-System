@@ -10,7 +10,7 @@ export default function MemberDashboardPage() {
         will appear here in later phases.
       </p>
       <div>
-        <Button render={<Link href="/member/profile">View my profile</Link>} />
+        <Button nativeButton={false} render={<Link href="/member/profile">View my profile</Link>} />
       </div>
     </div>
   );

@@ -58,7 +58,7 @@ export default async function MembersPage({
           <h1 className="text-2xl font-semibold tracking-tight">Members</h1>
           <p className="text-muted-foreground">{total} member{total === 1 ? "" : "s"}</p>
         </div>
-        <Button render={<Link href="/admin/members/new">Add member</Link>} />
+        <Button nativeButton={false} render={<Link href="/admin/members/new">Add member</Link>} />
       </div>
 
       <form className="flex flex-wrap items-end gap-3" method="GET">
@@ -98,7 +98,7 @@ export default async function MembersPage({
           Apply
         </Button>
         {(search || status) && (
-          <Button variant="ghost" render={<Link href="/admin/members">Clear</Link>} />
+          <Button variant="ghost" nativeButton={false} render={<Link href="/admin/members">Clear</Link>} />
         )}
       </form>
 

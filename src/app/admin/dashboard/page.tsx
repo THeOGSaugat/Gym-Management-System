@@ -10,7 +10,7 @@ export default function AdminDashboardPage() {
         appear here in later phases.
       </p>
       <div>
-        <Button render={<Link href="/admin/members">Manage members</Link>} />
+        <Button nativeButton={false} render={<Link href="/admin/members">Manage members</Link>} />
       </div>
     </div>
   );
