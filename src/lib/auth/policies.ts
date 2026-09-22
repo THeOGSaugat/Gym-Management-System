@@ -273,3 +273,17 @@ export function canViewTrainerDashboard(actor: Actor): boolean {
 export function canViewMemberDashboard(actor: Actor): boolean {
   return actor.role === "MEMBER";
 }
+
+/**
+ * Who can view or manage a given notification: only its recipient —
+ * with no exception, not even for an admin. Every other canView*For
+ * function in this file gives an admin blanket access as an oversight
+ * capability; this one deliberately doesn't, per the explicit
+ * requirement that "users can only access their own notifications." A
+ * notification is inherently personal (it exists to tell *this* user
+ * something happened), not a resource an admin needs to audit on
+ * someone else's behalf.
+ */
+export function canAccessNotification(actor: Actor, recipientUserId: string): boolean {
+  return actor.id === recipientUserId;
+}

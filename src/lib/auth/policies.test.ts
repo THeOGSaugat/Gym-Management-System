@@ -21,6 +21,7 @@ import {
   canViewAdminDashboard,
   canViewTrainerDashboard,
   canViewMemberDashboard,
+  canAccessNotification,
 } from "./policies";
 
 const admin = { id: "admin-1", role: "ADMIN" } as const;
@@ -314,5 +315,20 @@ describe("canViewMemberDashboard", () => {
   it("denies ADMIN and TRAINER", () => {
     expect(canViewMemberDashboard(admin)).toBe(false);
     expect(canViewMemberDashboard(trainer)).toBe(false);
+  });
+});
+
+describe("canAccessNotification", () => {
+  it("allows the recipient themselves", () => {
+    expect(canAccessNotification(member, member.id)).toBe(true);
+  });
+
+  it("denies a different member, even if they're the recipient's own trainer", () => {
+    expect(canAccessNotification(otherMember, member.id)).toBe(false);
+    expect(canAccessNotification(trainer, member.id)).toBe(false);
+  });
+
+  it("denies ADMIN — there is no admin override for notifications", () => {
+    expect(canAccessNotification(admin, member.id)).toBe(false);
   });
 });

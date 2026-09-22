@@ -154,6 +154,36 @@ describe("assignMemberToTrainer", () => {
       expect.objectContaining({ data: expect.objectContaining({ trainerId: "trainer-2" }) }),
     );
   });
+
+  it("notifies both the member and the trainer, each with their own message", async () => {
+    prismaMock.user.findUnique.mockResolvedValueOnce(memberUser).mockResolvedValueOnce(trainerUser);
+    mockTransaction();
+    prismaMock.trainerAssignment.findFirst.mockResolvedValue(null);
+    prismaMock.trainerAssignment.create.mockResolvedValue(assignmentRow());
+
+    await assignMemberToTrainer(admin, "member-1", "trainer-1");
+
+    expect(prismaMock.notification.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          recipientUserId: "member-1",
+          type: "TRAINER_ASSIGNED",
+          relatedEntityId: "assignment-1",
+        }),
+      }),
+    );
+    expect(prismaMock.notification.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          recipientUserId: "trainer-1",
+          type: "TRAINER_ASSIGNED",
+          relatedEntityId: "assignment-1",
+          linkUrl: "/trainer/members/member-1",
+        }),
+      }),
+    );
+    expect(prismaMock.notification.create).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("removeAssignment", () => {

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth/session";
 import { getMemberDashboard } from "@/server/services/dashboard.service";
+import { listNotifications } from "@/server/services/notification.service";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,6 +46,7 @@ const METRIC_LABELS: Record<string, string> = {
 export default async function MemberDashboardPage() {
   const actor = await requireRole("MEMBER");
   const data = await getMemberDashboard(actor);
+  const recentNotifications = (await listNotifications(actor, { unreadOnly: true })).slice(0, 3);
 
   return (
     <div className="flex flex-col gap-6">
@@ -212,9 +214,24 @@ export default async function MemberDashboardPage() {
             <CardTitle>Notifications</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">
-              No notifications yet — this is coming in a later phase.
-            </p>
+            {recentNotifications.length === 0 ? (
+              <p className="text-sm text-muted-foreground">You&apos;re all caught up.</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {recentNotifications.map((n) => (
+                  <div key={n.id} className="flex flex-col gap-0.5">
+                    <p className="text-sm font-medium">{n.title}</p>
+                    <p className="text-xs text-muted-foreground">{n.message}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Button
+              variant="outline"
+              className="mt-3 w-fit"
+              nativeButton={false}
+              render={<Link href="/member/notifications">View all notifications</Link>}
+            />
           </CardContent>
         </Card>
       </div>

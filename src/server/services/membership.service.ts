@@ -7,7 +7,17 @@ import {
   addDays,
   isMembershipCurrentlyActive,
 } from "@/lib/membership";
+import { createNotificationOnce } from "@/server/services/notification.service";
 import type { Membership } from "@/generated/prisma/client";
+
+// How many days out "expiring soon" starts warning a member — chosen to
+// give enough time to renew without being so early the reminder feels
+// premature. A membership that's already within this window when a
+// member visits any page that self-heals their memberships (their
+// membership page, their dashboard, ...) gets exactly one notification,
+// not one per visit — see createNotificationOnce's dedup-by-related-
+// entity guard below.
+const EXPIRING_SOON_THRESHOLD_DAYS = 3;
 
 /**
  * If a membership's stored `status` has gone stale (an ACTIVE row whose
@@ -17,12 +27,50 @@ import type { Membership } from "@/generated/prisma/client";
  * self-heals instead of trusting a value nothing has updated recently.
  * Called from every read path below, plus explicitly before any lifecycle
  * action that depends on the membership's *current* state.
+ *
+ * Also where the two membership-related notification types get created —
+ * this is the one choke point every read path already funnels through,
+ * so it's the natural (and only) place to notice "this just expired" or
+ * "this is about to." Both use createNotificationOnce, keyed on this
+ * membership's id, so re-visiting the same page repeatedly never creates
+ * a second notification for the same event.
  */
 async function syncMembershipStatus(membership: Membership, now = new Date()): Promise<Membership> {
   const effective = computeEffectiveStatus(membership, now);
-  if (effective === membership.status) return membership;
 
-  return db.membership.update({ where: { id: membership.id }, data: { status: effective } });
+  let current = membership;
+  if (effective !== membership.status) {
+    current = await db.membership.update({ where: { id: membership.id }, data: { status: effective } });
+
+    if (effective === "EXPIRED") {
+      await createNotificationOnce({
+        recipientUserId: current.memberId,
+        type: "MEMBERSHIP_EXPIRED",
+        title: "Membership expired",
+        message: `Your ${current.planNameSnapshot} membership expired on ${current.endDate.toLocaleDateString()}.`,
+        linkUrl: "/member/membership",
+        relatedEntityId: current.id,
+      });
+    }
+  }
+
+  if (effective === "ACTIVE") {
+    const daysUntilExpiry = Math.ceil(
+      (current.endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+    );
+    if (daysUntilExpiry >= 0 && daysUntilExpiry <= EXPIRING_SOON_THRESHOLD_DAYS) {
+      await createNotificationOnce({
+        recipientUserId: current.memberId,
+        type: "MEMBERSHIP_EXPIRING",
+        title: "Membership expiring soon",
+        message: `Your ${current.planNameSnapshot} membership expires on ${current.endDate.toLocaleDateString()}.`,
+        linkUrl: "/member/membership",
+        relatedEntityId: current.id,
+      });
+    }
+  }
+
+  return current;
 }
 
 export async function listMembershipsForMember(actor: Actor, memberId: string) {
@@ -196,7 +244,11 @@ export async function cancelMembership(actor: Actor, membershipId: string, reaso
  * (ACTIVE or PENDING) and self-heals its status if the dates say
  * otherwise. Every read path already self-heals the rows it touches, so
  * this exists for admin peace of mind / testing rather than being load
- * bearing — nothing depends on it having been run recently.
+ * bearing — nothing depends on it having been run recently. Reuses
+ * syncMembershipStatus (rather than its own inline update) so a sweep
+ * also picks up the same expiring-soon/expired notifications an
+ * individual member's own page visit would have triggered — one
+ * implementation of "what changed and who to tell," not two.
  */
 export async function sweepMembershipStatuses(actor: Actor) {
   if (!canManageFinancialRecords(actor)) {
@@ -210,11 +262,8 @@ export async function sweepMembershipStatuses(actor: Actor) {
   const now = new Date();
   let changed = 0;
   for (const membership of candidates) {
-    const effective = computeEffectiveStatus(membership, now);
-    if (effective !== membership.status) {
-      await db.membership.update({ where: { id: membership.id }, data: { status: effective } });
-      changed += 1;
-    }
+    const synced = await syncMembershipStatus(membership, now);
+    if (synced.status !== membership.status) changed += 1;
   }
 
   return { checked: candidates.length, changed };

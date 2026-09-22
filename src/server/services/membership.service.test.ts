@@ -322,6 +322,95 @@ describe("getMembership — authorization and self-healing", () => {
   });
 });
 
+describe("membership-related notifications (via getMembership's self-heal)", () => {
+  it("creates a MEMBERSHIP_EXPIRED notification when a stale ACTIVE row is self-healed to EXPIRED", async () => {
+    const stale = membershipRow({
+      status: "ACTIVE",
+      startDate: new Date("2020-01-01"),
+      endDate: new Date("2020-01-31"),
+    });
+    prismaMock.membership.findUnique.mockResolvedValue({ ...stale, plan: activePlan, payments: [] } as never);
+    prismaMock.membership.update.mockResolvedValue({ ...stale, status: "EXPIRED" });
+    prismaMock.notification.findFirst.mockResolvedValue(null);
+
+    await getMembership(admin, "membership-1");
+
+    expect(prismaMock.notification.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          recipientUserId: "member-1",
+          type: "MEMBERSHIP_EXPIRED",
+          relatedEntityId: "membership-1",
+        }),
+      }),
+    );
+  });
+
+  it("does not create a duplicate MEMBERSHIP_EXPIRED notification if one already exists", async () => {
+    const stale = membershipRow({
+      status: "ACTIVE",
+      startDate: new Date("2020-01-01"),
+      endDate: new Date("2020-01-31"),
+    });
+    prismaMock.membership.findUnique.mockResolvedValue({ ...stale, plan: activePlan, payments: [] } as never);
+    prismaMock.membership.update.mockResolvedValue({ ...stale, status: "EXPIRED" });
+    prismaMock.notification.findFirst.mockResolvedValue({
+      id: "existing-notif",
+      recipientUserId: "member-1",
+      type: "MEMBERSHIP_EXPIRED",
+      title: "Membership expired",
+      message: "already notified",
+      linkUrl: "/member/membership",
+      relatedEntityId: "membership-1",
+      isRead: false,
+      readAt: null,
+      createdAt: now,
+    });
+
+    await getMembership(admin, "membership-1");
+
+    expect(prismaMock.notification.create).not.toHaveBeenCalled();
+  });
+
+  it("creates a MEMBERSHIP_EXPIRING notification for a still-ACTIVE row within the threshold", async () => {
+    const soon = membershipRow({
+      status: "ACTIVE",
+      startDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 27),
+      endDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 2), // 2 days from now — within the 3-day threshold
+    });
+    prismaMock.membership.findUnique.mockResolvedValue({ ...soon, plan: activePlan, payments: [] } as never);
+    prismaMock.notification.findFirst.mockResolvedValue(null);
+
+    await getMembership(admin, "membership-1");
+
+    expect(prismaMock.notification.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          recipientUserId: "member-1",
+          type: "MEMBERSHIP_EXPIRING",
+          relatedEntityId: "membership-1",
+        }),
+      }),
+    );
+    // A row that's merely "expiring soon" hasn't actually changed status,
+    // so this shouldn't trigger an unnecessary write.
+    expect(prismaMock.membership.update).not.toHaveBeenCalled();
+  });
+
+  it("does not create an expiring-soon notification for a row with plenty of time left", async () => {
+    const notSoon = membershipRow({
+      status: "ACTIVE",
+      startDate: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5),
+      endDate: new Date(Date.now() + 1000 * 60 * 60 * 24 * 20),
+    });
+    prismaMock.membership.findUnique.mockResolvedValue({ ...notSoon, plan: activePlan, payments: [] } as never);
+
+    await getMembership(admin, "membership-1");
+
+    expect(prismaMock.notification.create).not.toHaveBeenCalled();
+  });
+});
+
 describe("listMembershipsForMember", () => {
   it("throws ForbiddenError for a member requesting someone else's list", async () => {
     await expect(listMembershipsForMember(member, "member-2")).rejects.toBeInstanceOf(

@@ -69,6 +69,8 @@ model User {
   progressLogs         ProgressLog[] @relation("MemberProgressLogs")
   progressLogsRecorded ProgressLog[] @relation("ProgressLogRecordedBy")
 
+  notifications Notification[] @relation("UserNotifications")
+
   @@map("users")
 }
 
@@ -512,4 +514,56 @@ model ProgressLog {
 
   @@index([memberId, recordedAt])
   @@map("progress_logs")
+}
+
+// What kind of event a Notification is about. A closed set, deliberately
+// small — every value here corresponds to exactly one call site that
+// creates it (see notification.service.ts and the "How notifications
+// work" README section), not a generic free-text category a caller could
+// misuse to spam a user with ad-hoc messages.
+enum NotificationType {
+  MEMBERSHIP_EXPIRING
+  MEMBERSHIP_EXPIRED
+  PAYMENT_RECORDED
+  WORKOUT_PLAN_ASSIGNED
+  TRAINER_ASSIGNED
+}
+
+// In-app only — there is no email/push delivery yet (see
+// notification.service.ts's comment on why, and the README's "How
+// notifications work" section). A row here is the single source of
+// truth for "was this user told about this," so a future email channel
+// would read from this table rather than duplicating its own history.
+model Notification {
+  id String @id @default(cuid())
+
+  recipientUserId String
+  recipient       User   @relation("UserNotifications", fields: [recipientUserId], references: [id], onDelete: Cascade)
+
+  type    NotificationType
+  title   String
+  message String
+
+  // Deep link into the app (e.g. "/member/workout-plans/abc123") shown as
+  // an "Open" action if present. Nullable — a purely informational
+  // notification (e.g. "you were assigned a new trainer," which has no
+  // dedicated page to link to yet) has none.
+  linkUrl String?
+
+  // The id of whatever row this notification is about — a Membership,
+  // Payment, WorkoutPlan, or TrainerAssignment id, depending on `type`.
+  // Used only for the dedup check in notification.service.ts's
+  // createNotificationOnce (e.g. "don't create a second 'expiring soon'
+  // notification for the same membership"), never joined against
+  // directly, since which table it refers to varies by type.
+  relatedEntityId String?
+
+  isRead Boolean   @default(false)
+  readAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([recipientUserId, isRead])
+  @@index([recipientUserId, createdAt])
+  @@map("notifications")
 }

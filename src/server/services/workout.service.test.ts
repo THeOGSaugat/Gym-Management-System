@@ -144,6 +144,36 @@ describe("createWorkoutPlan (trainer creating a workout)", () => {
       }),
     );
   });
+
+  it("creates a WORKOUT_PLAN_ASSIGNED notification for the member", async () => {
+    prismaMock.user.findUnique.mockResolvedValue(memberUser);
+    prismaMock.trainerAssignment.findFirst.mockResolvedValue({
+      id: "assignment-1",
+      memberId: "member-1",
+      trainerId: "trainer-1",
+      status: "ACTIVE",
+      startDate: new Date(),
+      endDate: null,
+      notes: null,
+      assignedByUserId: "admin-1",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    prismaMock.workoutPlan.create.mockResolvedValue(planRow());
+
+    await createWorkoutPlan(trainer, "member-1", validPlanInput);
+
+    expect(prismaMock.notification.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          recipientUserId: "member-1",
+          type: "WORKOUT_PLAN_ASSIGNED",
+          relatedEntityId: "plan-1",
+          linkUrl: "/member/workout-plans/plan-1",
+        }),
+      }),
+    );
+  });
 });
 
 describe("getWorkoutPlan / listWorkoutPlansForMember (viewing)", () => {

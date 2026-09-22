@@ -48,6 +48,22 @@ const validInput = {
   paidAt: undefined,
 };
 
+const createdPayment = {
+  id: "payment-1",
+  memberId: "member-1",
+  membershipId: null,
+  amountMinor: 4999,
+  currency: "USD",
+  method: "CASH" as const,
+  status: "SUCCEEDED" as const,
+  reference: null,
+  notes: null,
+  paidAt: new Date(),
+  recordedByUserId: "admin-1",
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+
 describe("recordPayment", () => {
   it("throws ForbiddenError for a non-admin actor", async () => {
     await expect(recordPayment(member, "member-1", validInput)).rejects.toBeInstanceOf(
@@ -66,7 +82,7 @@ describe("recordPayment", () => {
 
   it("records a payment for an admin, attributed to the acting admin", async () => {
     prismaMock.user.findUnique.mockResolvedValue(memberUser);
-    prismaMock.payment.create.mockResolvedValue({} as never);
+    prismaMock.payment.create.mockResolvedValue(createdPayment);
 
     await recordPayment(admin, "member-1", validInput);
 
@@ -77,6 +93,23 @@ describe("recordPayment", () => {
           amountMinor: 4999,
           method: "CASH",
           recordedByUserId: "admin-1",
+        }),
+      }),
+    );
+  });
+
+  it("creates a PAYMENT_RECORDED notification for the member", async () => {
+    prismaMock.user.findUnique.mockResolvedValue(memberUser);
+    prismaMock.payment.create.mockResolvedValue(createdPayment);
+
+    await recordPayment(admin, "member-1", validInput);
+
+    expect(prismaMock.notification.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          recipientUserId: "member-1",
+          type: "PAYMENT_RECORDED",
+          relatedEntityId: "payment-1",
         }),
       }),
     );
@@ -102,7 +135,7 @@ describe("recordPayment", () => {
   it("uses the membership's currency snapshot when a membership is given", async () => {
     prismaMock.user.findUnique.mockResolvedValue(memberUser);
     prismaMock.membership.findUnique.mockResolvedValue(membershipRow);
-    prismaMock.payment.create.mockResolvedValue({} as never);
+    prismaMock.payment.create.mockResolvedValue(createdPayment);
 
     await recordPayment(admin, "member-1", { ...validInput, membershipId: "membership-1" });
 

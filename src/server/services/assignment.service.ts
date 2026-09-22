@@ -1,6 +1,7 @@
 import { db } from "@/server/db";
 import { canManageAssignments, canViewTrainerRoster, type Actor } from "@/lib/auth/policies";
 import { ForbiddenError, NotFoundError, ConflictError } from "@/lib/errors";
+import { createNotification } from "@/server/services/notification.service";
 
 async function requireActiveMember(memberId: string) {
   const member = await db.user.findUnique({ where: { id: memberId } });
@@ -36,10 +37,10 @@ export async function assignMemberToTrainer(
     throw new ForbiddenError("Only admins can assign members to trainers.");
   }
 
-  await requireActiveMember(memberId);
-  await requireActiveTrainer(trainerId);
+  const member = await requireActiveMember(memberId);
+  const trainer = await requireActiveTrainer(trainerId);
 
-  return db.$transaction(async (tx) => {
+  const assignment = await db.$transaction(async (tx) => {
     const current = await tx.trainerAssignment.findFirst({
       where: { memberId, status: "ACTIVE" },
     });
@@ -63,6 +64,32 @@ export async function assignMemberToTrainer(
       },
     });
   });
+
+  // Two notifications, one per side of the relationship — each recipient
+  // gets exactly one, told the one thing relevant to them. Not gated by
+  // createNotificationOnce: a new assignment row is already a genuinely
+  // new event (a repeat assignment to the same trainer is rejected above
+  // as a conflict before this point is ever reached), so there's no
+  // duplicate to guard against.
+  await Promise.all([
+    createNotification({
+      recipientUserId: memberId,
+      type: "TRAINER_ASSIGNED",
+      title: "Trainer assigned",
+      message: `You've been assigned a new trainer: ${trainer.fullName}.`,
+      relatedEntityId: assignment.id,
+    }),
+    createNotification({
+      recipientUserId: trainerId,
+      type: "TRAINER_ASSIGNED",
+      title: "New member assigned",
+      message: `You've been assigned a new member: ${member.fullName}.`,
+      linkUrl: `/trainer/members/${memberId}`,
+      relatedEntityId: assignment.id,
+    }),
+  ]);
+
+  return assignment;
 }
 
 /** Ends a member's current assignment with no replacement — the member becomes unassigned. */

@@ -1,6 +1,8 @@
 import { db } from "@/server/db";
 import { canManageFinancialRecords, canViewFinancialRecordsFor, type Actor } from "@/lib/auth/policies";
 import { ForbiddenError, NotFoundError, ConflictError } from "@/lib/errors";
+import { createNotification } from "@/server/services/notification.service";
+import { formatMinorUnits } from "@/lib/money";
 import type { PaymentMethod, PaymentStatus } from "@/generated/prisma/client";
 
 const PAYMENTS_PER_PAGE = 20;
@@ -45,7 +47,7 @@ export async function recordPayment(actor: Actor, memberId: string, input: Recor
     currency = membership.currencySnapshot;
   }
 
-  return db.payment.create({
+  const payment = await db.payment.create({
     data: {
       memberId,
       membershipId: input.membershipId,
@@ -59,6 +61,24 @@ export async function recordPayment(actor: Actor, memberId: string, input: Recor
       recordedByUserId: actor.id,
     },
   });
+
+  // A fresh notification per payment, deliberately not deduped like the
+  // membership-expiry ones — every payment row is already a genuinely
+  // new, distinct event (there's no risk of the same payment triggering
+  // this twice), so there's nothing to guard against here.
+  await createNotification({
+    recipientUserId: memberId,
+    type: "PAYMENT_RECORDED",
+    title: "Payment recorded",
+    message:
+      payment.status === "SUCCEEDED"
+        ? `A payment of ${formatMinorUnits(payment.amountMinor, payment.currency)} was recorded on your account.`
+        : `A payment of ${formatMinorUnits(payment.amountMinor, payment.currency)} was recorded with status ${payment.status.toLowerCase()}.`,
+    linkUrl: "/member/payments",
+    relatedEntityId: payment.id,
+  });
+
+  return payment;
 }
 
 export async function getPayment(actor: Actor, id: string) {

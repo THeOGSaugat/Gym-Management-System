@@ -6,6 +6,7 @@ import {
 } from "@/lib/auth/policies";
 import { ForbiddenError, NotFoundError } from "@/lib/errors";
 import { isMemberAssignedToTrainer } from "@/server/services/assignment.service";
+import { createNotification } from "@/server/services/notification.service";
 import type {
   WorkoutPlanInput,
   WorkoutDayInput,
@@ -92,7 +93,7 @@ export async function createWorkoutPlan(actor: Actor, memberId: string, input: W
     throw new ForbiddenError("You can only create workout plans for members assigned to you.");
   }
 
-  return db.workoutPlan.create({
+  const plan = await db.workoutPlan.create({
     data: {
       memberId,
       trainerId: actor.id,
@@ -102,6 +103,17 @@ export async function createWorkoutPlan(actor: Actor, memberId: string, input: W
       endDate: input.endDate,
     },
   });
+
+  await createNotification({
+    recipientUserId: memberId,
+    type: "WORKOUT_PLAN_ASSIGNED",
+    title: "New workout plan assigned",
+    message: `Your trainer assigned you a new workout plan: "${plan.name}".`,
+    linkUrl: `/member/workout-plans/${plan.id}`,
+    relatedEntityId: plan.id,
+  });
+
+  return plan;
 }
 
 export async function getWorkoutPlan(actor: Actor, id: string) {
