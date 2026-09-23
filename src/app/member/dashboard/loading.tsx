@@ -1,17 +1,20 @@
-export default function MemberDashboardLoading() {
+import { PageSkeleton, Skeleton } from "@/components/ui/skeleton";
+
+export default function Loading() {
   return (
-    <div className="flex flex-col gap-6">
-      <div className="h-8 w-56 animate-pulse rounded bg-muted" />
-      <div className="flex flex-wrap gap-3">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="h-9 w-32 animate-pulse rounded bg-muted" />
-        ))}
+    <PageSkeleton>
+      <Skeleton className="h-36 rounded-xl sm:h-32" />
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="flex flex-col gap-4 lg:col-span-2">
+          <Skeleton className="h-40 rounded-xl" />
+          <Skeleton className="h-56 rounded-xl" />
+        </div>
+        <div className="flex flex-col gap-4 lg:col-span-1">
+          <Skeleton className="h-36 rounded-xl" />
+          <Skeleton className="h-36 rounded-xl" />
+          <Skeleton className="h-40 rounded-xl" />
+        </div>
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-40 animate-pulse rounded-xl bg-muted" />
-        ))}
-      </div>
-    </div>
+    </PageSkeleton>
   );
 }

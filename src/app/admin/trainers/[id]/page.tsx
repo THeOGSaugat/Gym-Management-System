@@ -1,34 +1,37 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Users } from "lucide-react";
 import { requireRole } from "@/lib/auth/session";
 import { getTrainer } from "@/server/services/trainer.service";
 import { listAssignedMembers } from "@/server/services/assignment.service";
 import { handlePageError } from "@/lib/service-error";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { PageHeader } from "@/components/ui/page-header";
+import { Card, CardContent } from "@/components/ui/card";
+import { ConfirmAction } from "@/components/ui/confirm-action";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ListCard } from "@/components/ui/list-card";
+import { DetailGrid, DetailItem, Section } from "@/components/ui/section";
+import { SectionTabs } from "@/components/ui/section-tabs";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { TrainerForm } from "@/components/trainers/trainer-form";
 import { updateTrainerAction, setTrainerStatusAction } from "../actions";
 
 export const metadata: Metadata = {
-  title: "Trainer details",
+  title: "Trainer",
 };
+
+type Tab = "overview" | "settings";
 
 export default async function TrainerDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ section?: string }>;
 }) {
   const actor = await requireRole("ADMIN");
   const { id } = await params;
+  const query = await searchParams;
+  const tab: Tab = query.section === "settings" ? "settings" : "overview";
 
   const trainer = await getTrainer(actor, id).catch(handlePageError);
   const assignedMembers = await listAssignedMembers(actor, trainer.id);
@@ -36,99 +39,164 @@ export default async function TrainerDetailPage({
   const boundUpdateAction = updateTrainerAction.bind(null, trainer.id);
   const nextStatus = trainer.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE";
   const toggleStatusAction = setTrainerStatusAction.bind(null, trainer.id, nextStatus);
+  const base = `/admin/trainers/${trainer.id}`;
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight">{trainer.fullName}</h1>
-            <Badge variant={trainer.status === "ACTIVE" ? "default" : "outline"}>
-              {trainer.status === "ACTIVE" ? "Active" : "Suspended"}
-            </Badge>
-          </div>
-          {trainer.trainerProfile?.specialization && (
-            <p className="text-muted-foreground">{trainer.trainerProfile.specialization}</p>
-          )}
-        </div>
-      </div>
+      <PageHeader
+        backHref="/admin/trainers"
+        backLabel="Trainers"
+        title={trainer.fullName}
+        badge={<StatusBadge kind="account" status={trainer.status} />}
+        description={
+          trainer.trainerProfile?.specialization ?? "No specialization on file"
+        }
+      />
 
-      <Card className="max-w-2xl">
-        <CardHeader>
-          <CardTitle>Trainer details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <TrainerForm
-            mode="edit"
-            action={boundUpdateAction}
-            defaultValues={{
-              fullName: trainer.fullName,
-              email: trainer.email,
-              phone: trainer.phone ?? undefined,
-              bio: trainer.trainerProfile?.bio ?? undefined,
-              specialization: trainer.trainerProfile?.specialization ?? undefined,
-              experienceYears: trainer.trainerProfile?.experienceYears ?? undefined,
-            }}
-          />
-        </CardContent>
-      </Card>
+      <SectionTabs
+        items={[
+          { label: "Overview", href: base, active: tab === "overview" },
+          { label: "Settings", href: `${base}?section=settings`, active: tab === "settings" },
+        ]}
+      />
 
-      <Card className="max-w-2xl">
-        <CardHeader>
-          <CardTitle>Assigned members</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {assignedMembers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No members currently assigned.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Member</TableHead>
-                  <TableHead>Since</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+      {tab === "overview" ? (
+        <div className="flex flex-col gap-6">
+          <Card>
+            <CardContent>
+              <DetailGrid>
+                <DetailItem label="Email">
+                  <a href={`mailto:${trainer.email}`} className="hover:underline">
+                    {trainer.email}
+                  </a>
+                </DetailItem>
+                <DetailItem label="Phone">
+                  {trainer.phone ? (
+                    <a href={`tel:${trainer.phone}`} className="hover:underline">
+                      {trainer.phone}
+                    </a>
+                  ) : (
+                    <span className="text-muted-foreground">Not on file</span>
+                  )}
+                </DetailItem>
+                <DetailItem label="Experience">
+                  {trainer.trainerProfile?.experienceYears != null ? (
+                    `${trainer.trainerProfile.experienceYears} year${trainer.trainerProfile.experienceYears === 1 ? "" : "s"}`
+                  ) : (
+                    <span className="text-muted-foreground">Not on file</span>
+                  )}
+                </DetailItem>
+                <DetailItem label="Assigned members">
+                  {assignedMembers.length}
+                </DetailItem>
+              </DetailGrid>
+
+              {trainer.trainerProfile?.bio ? (
+                <p className="mt-5 border-t border-border pt-4 text-[0.8125rem] leading-relaxed text-muted-foreground">
+                  {trainer.trainerProfile.bio}
+                </p>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          <Section
+            title="Assigned members"
+            description={`${assignedMembers.length} member${assignedMembers.length === 1 ? "" : "s"} currently assigned`}
+          >
+            {assignedMembers.length === 0 ? (
+              <EmptyState
+                icon={Users}
+                title="No members assigned"
+                description="Assign members to this trainer from a member's Training tab."
+              />
+            ) : (
+              <ul className="flex flex-col gap-2">
                 {assignedMembers.map((assignment) => (
-                  <TableRow key={assignment.id}>
-                    <TableCell className="font-medium">
-                      <Link
-                        href={`/admin/members/${assignment.memberId}`}
-                        className="hover:underline"
-                      >
-                        {assignment.member.fullName}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {assignment.startDate.toLocaleDateString()}
-                    </TableCell>
-                  </TableRow>
+                  <li key={assignment.id}>
+                    <ListCard
+                      href={`/admin/members/${assignment.memberId}`}
+                      avatarName={assignment.member.fullName}
+                      title={assignment.member.fullName}
+                      meta={`Assigned since ${assignment.startDate.toLocaleDateString()}`}
+                    />
+                  </li>
                 ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+              </ul>
+            )}
+          </Section>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-6">
+          <Section title="Trainer details">
+            <Card>
+              <CardContent>
+                <TrainerForm
+                  mode="edit"
+                  action={boundUpdateAction}
+                  defaultValues={{
+                    fullName: trainer.fullName,
+                    email: trainer.email,
+                    phone: trainer.phone ?? undefined,
+                    bio: trainer.trainerProfile?.bio ?? undefined,
+                    specialization: trainer.trainerProfile?.specialization ?? undefined,
+                    experienceYears: trainer.trainerProfile?.experienceYears ?? undefined,
+                  }}
+                />
+              </CardContent>
+            </Card>
+          </Section>
 
-      <Card className="max-w-2xl border-destructive/30">
-        <CardHeader>
-          <CardTitle className="text-destructive">Danger zone</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between gap-4">
-            <p className="text-sm text-muted-foreground">
-              {trainer.status === "ACTIVE"
-                ? "Deactivating prevents this trainer from logging in and ends all their current assignments. Their data is kept."
-                : "Reactivating allows this trainer to log in again. Their previous assignments stay ended — reassign members as needed."}
-            </p>
-            <form action={toggleStatusAction}>
-              <Button type="submit" variant={trainer.status === "ACTIVE" ? "destructive" : "outline"}>
-                {trainer.status === "ACTIVE" ? "Deactivate" : "Reactivate"}
-              </Button>
-            </form>
-          </div>
-        </CardContent>
-      </Card>
+          <Section title="Danger zone">
+            <Card className="border-destructive-border">
+              <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-1">
+                  <p className="text-sm font-medium">
+                    {trainer.status === "ACTIVE" ? "Deactivate trainer" : "Reactivate trainer"}
+                  </p>
+                  <p className="text-[0.8125rem] leading-relaxed text-muted-foreground">
+                    {trainer.status === "ACTIVE"
+                      ? "Prevents this trainer from signing in and ends their current assignments."
+                      : "Restores access. Previous assignments stay ended — reassign members as needed."}
+                  </p>
+                </div>
+
+                {trainer.status === "ACTIVE" ? (
+                  <ConfirmAction
+                    action={toggleStatusAction}
+                    title={`Deactivate ${trainer.fullName}?`}
+                    description="This ends their active assignments and prevents them from accessing the trainer portal."
+                    consequences={[
+                      assignedMembers.length > 0
+                        ? `${assignedMembers.length} member${assignedMembers.length === 1 ? "" : "s"} will immediately show as having no trainer.`
+                        : "They currently have no assigned members.",
+                      "Workout plans they created are kept, but they can no longer edit them.",
+                    ]}
+                    reversibility="Reactivating restores their login, but does not restore the assignments — you'd reassign each member."
+                    confirmLabel="Deactivate trainer"
+                    triggerLabel="Deactivate"
+                    triggerClassName="w-full sm:w-auto"
+                  />
+                ) : (
+                  <ConfirmAction
+                    action={toggleStatusAction}
+                    tone="default"
+                    title={`Reactivate ${trainer.fullName}?`}
+                    description="They'll be able to sign in to the trainer portal again."
+                    consequences={[
+                      "Previously ended assignments are not restored — assign members again as needed.",
+                    ]}
+                    reversibility="Reversible — you can deactivate again later."
+                    confirmLabel="Reactivate trainer"
+                    triggerLabel="Reactivate"
+                    triggerVariant="outline"
+                    triggerClassName="w-full sm:w-auto"
+                  />
+                )}
+              </CardContent>
+            </Card>
+          </Section>
+        </div>
+      )}
     </div>
   );
 }

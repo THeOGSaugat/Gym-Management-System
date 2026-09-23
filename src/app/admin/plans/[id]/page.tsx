@@ -2,15 +2,17 @@ import type { Metadata } from "next";
 import { requireRole } from "@/lib/auth/session";
 import { getPlan } from "@/server/services/plan.service";
 import { handlePageError } from "@/lib/service-error";
-import { toDecimalString } from "@/lib/money";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatMinorUnits, toDecimalString } from "@/lib/money";
+import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { ConfirmAction } from "@/components/ui/confirm-action";
+import { Section } from "@/components/ui/section";
 import { PlanForm } from "@/components/plans/plan-form";
 import { updatePlanAction, setPlanActiveAction } from "../actions";
 
 export const metadata: Metadata = {
-  title: "Plan details",
+  title: "Plan",
 };
 
 export default async function PlanDetailPage({
@@ -29,52 +31,81 @@ export default async function PlanDetailPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">{plan.name}</h1>
-        <Badge variant={plan.isActive ? "default" : "outline"}>
-          {plan.isActive ? "Active" : "Inactive"}
-        </Badge>
-      </div>
+      <PageHeader
+        backHref="/admin/plans"
+        backLabel="Membership plans"
+        title={plan.name}
+        badge={
+          plan.isActive ? (
+            <Badge variant="success">Active</Badge>
+          ) : (
+            <Badge variant="muted">Inactive</Badge>
+          )
+        }
+        description={`${formatMinorUnits(plan.priceMinor, plan.currency)} · ${plan.durationDays} day${plan.durationDays === 1 ? "" : "s"}`}
+      />
 
-      <Card className="max-w-xl">
-        <CardHeader>
-          <CardTitle>Plan details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <PlanForm
-            mode="edit"
-            action={boundUpdateAction}
-            defaultValues={{
-              name: plan.name,
-              description: plan.description ?? undefined,
-              durationDays: plan.durationDays,
-              price: toDecimalString(plan.priceMinor),
-            }}
-          />
-        </CardContent>
-      </Card>
+      <Section title="Plan details">
+        <Card className="max-w-2xl">
+          <CardContent>
+            <PlanForm
+              mode="edit"
+              action={boundUpdateAction}
+              defaultValues={{
+                name: plan.name,
+                description: plan.description ?? undefined,
+                durationDays: plan.durationDays,
+                price: toDecimalString(plan.priceMinor),
+              }}
+            />
+          </CardContent>
+        </Card>
+      </Section>
 
-      <Card className="max-w-xl border-destructive/30">
-        <CardHeader>
-          <CardTitle className="text-destructive">
-            {plan.isActive ? "Deactivate plan" : "Reactivate plan"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between gap-4">
-            <p className="text-sm text-muted-foreground">
-              {plan.isActive
-                ? "Deactivating stops this plan being offered for new or renewed memberships. Existing memberships on this plan are unaffected."
-                : "Reactivating lets admins assign this plan to new memberships again."}
-            </p>
-            <form action={toggleActiveAction}>
-              <Button type="submit" variant={plan.isActive ? "destructive" : "outline"}>
-                {plan.isActive ? "Deactivate" : "Reactivate"}
-              </Button>
-            </form>
-          </div>
-        </CardContent>
-      </Card>
+      <Section title="Availability">
+        <Card className="max-w-2xl border-destructive-border">
+          <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-1">
+              <p className="text-sm font-medium">
+                {plan.isActive ? "Deactivate plan" : "Reactivate plan"}
+              </p>
+              <p className="text-[0.8125rem] leading-relaxed text-muted-foreground">
+                {plan.isActive
+                  ? "Stops this plan being offered for new or renewed memberships."
+                  : "Lets admins assign this plan to new memberships again."}
+              </p>
+            </div>
+
+            {plan.isActive ? (
+              <ConfirmAction
+                action={toggleActiveAction}
+                title={`Deactivate "${plan.name}"?`}
+                description="This plan will no longer be selectable when assigning or renewing a membership."
+                consequences={[
+                  "Members already on this plan keep their membership and its price — nothing changes for them.",
+                  "Renewing an existing membership on this plan will be blocked until it's reactivated.",
+                ]}
+                reversibility="Fully reversible — you can reactivate the plan from this page."
+                confirmLabel="Deactivate plan"
+                triggerLabel="Deactivate"
+                triggerClassName="w-full sm:w-auto"
+              />
+            ) : (
+              <ConfirmAction
+                action={toggleActiveAction}
+                tone="default"
+                title={`Reactivate "${plan.name}"?`}
+                description="This plan becomes selectable again for new and renewed memberships."
+                reversibility="Reversible — you can deactivate it again later."
+                confirmLabel="Reactivate plan"
+                triggerLabel="Reactivate"
+                triggerVariant="outline"
+                triggerClassName="w-full sm:w-auto"
+              />
+            )}
+          </CardContent>
+        </Card>
+      </Section>
     </div>
   );
 }

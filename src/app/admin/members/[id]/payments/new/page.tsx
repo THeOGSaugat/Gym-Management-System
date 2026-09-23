@@ -3,7 +3,8 @@ import { requireRole } from "@/lib/auth/session";
 import { getMember } from "@/server/services/member.service";
 import { listMembershipsForMember } from "@/server/services/membership.service";
 import { handlePageError } from "@/lib/service-error";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
+import { Card, CardContent } from "@/components/ui/card";
 import { RecordPaymentForm } from "@/components/payments/record-payment-form";
 import { recordPaymentAction } from "../actions";
 
@@ -29,14 +30,14 @@ export default async function RecordPaymentPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        Record payment for {member.fullName}
-      </h1>
+      <PageHeader
+        backHref={`/admin/members/${member.id}?section=membership`}
+        backLabel={member.fullName}
+        title="Record payment"
+        description="Payment records are append-only — a correction is recorded as a new payment, never an edit."
+      />
 
-      <Card className="max-w-xl">
-        <CardHeader>
-          <CardTitle>Payment details</CardTitle>
-        </CardHeader>
+      <Card className="max-w-2xl">
         <CardContent>
           <RecordPaymentForm
             action={boundAction}

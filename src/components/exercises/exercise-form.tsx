@@ -2,9 +2,10 @@
 
 import { useActionState } from "react";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { ActionFeedback } from "@/components/ui/action-feedback";
+import { Field, FormActions, FormSection } from "@/components/ui/form-field";
 
 export type ExerciseFormState = { error: string } | undefined;
 
@@ -29,61 +30,57 @@ export function ExerciseForm({
 
   return (
     <form action={formAction} className="flex flex-col gap-6" noValidate>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="name">Name</Label>
+      <FormSection title="Exercise">
+        <Field label="Name" htmlFor="name">
           <Input
             id="name"
             name="name"
+            placeholder="e.g. Bench Press"
             required
             disabled={pending}
             defaultValue={defaultValues?.name}
-            placeholder="Bench Press"
           />
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="muscleGroup">Muscle group</Label>
+        </Field>
+        <Field label="Muscle group" htmlFor="muscleGroup" optional>
           <Input
             id="muscleGroup"
             name="muscleGroup"
+            placeholder="e.g. Chest"
             disabled={pending}
             defaultValue={defaultValues?.muscleGroup}
-            placeholder="Chest"
           />
-        </div>
-      </div>
+        </Field>
+      </FormSection>
 
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="description">Description</Label>
-        <Textarea
-          id="description"
-          name="description"
-          rows={2}
-          disabled={pending}
-          defaultValue={defaultValues?.description}
-        />
-      </div>
+      <FormSection
+        title="Guidance"
+        description="Shown to trainers when they pick this exercise for a workout day."
+        columns={1}
+      >
+        <Field label="Description" htmlFor="description" optional>
+          <Textarea
+            id="description"
+            name="description"
+            rows={2}
+            disabled={pending}
+            defaultValue={defaultValues?.description}
+          />
+        </Field>
+        <Field label="Instructions" htmlFor="instructions" optional>
+          <Textarea
+            id="instructions"
+            name="instructions"
+            rows={4}
+            disabled={pending}
+            defaultValue={defaultValues?.instructions}
+          />
+        </Field>
+      </FormSection>
 
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="instructions">Instructions</Label>
-        <Textarea
-          id="instructions"
-          name="instructions"
-          rows={4}
-          disabled={pending}
-          defaultValue={defaultValues?.instructions}
-          placeholder="How to perform this exercise safely and correctly."
-        />
-      </div>
+      {state?.error ? <ActionFeedback tone="error">{state.error}</ActionFeedback> : null}
 
-      {state?.error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {state.error}
-        </p>
-      ) : null}
-
-      <div>
-        <Button type="submit" disabled={pending}>
+      <FormActions>
+        <Button type="submit" disabled={pending} className="w-full sm:w-auto">
           {pending
             ? mode === "create"
               ? "Adding…"
@@ -92,7 +89,7 @@ export function ExerciseForm({
               ? "Add exercise"
               : "Save changes"}
         </Button>
-      </div>
+      </FormActions>
     </form>
   );
 }

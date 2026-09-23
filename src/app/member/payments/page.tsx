@@ -1,28 +1,16 @@
 import type { Metadata } from "next";
+import { CreditCard } from "lucide-react";
 import { requireRole } from "@/lib/auth/session";
 import { listPaymentsForMember } from "@/server/services/payment.service";
 import { formatMinorUnits } from "@/lib/money";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { paymentMethodLabel } from "@/lib/payment-display";
+import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
+import { StatusBadge } from "@/components/ui/status-badge";
 
 export const metadata: Metadata = {
-  title: "My payments",
+  title: "Payments",
 };
-
-const STATUS_VARIANT = {
-  SUCCEEDED: "default",
-  PENDING: "secondary",
-  FAILED: "destructive",
-  REFUNDED: "outline",
-} as const;
 
 export default async function MyPaymentsPage() {
   const actor = await requireRole("MEMBER");
@@ -32,51 +20,60 @@ export default async function MyPaymentsPage() {
   // signature is later reused elsewhere.
   const payments = await listPaymentsForMember(actor, actor.id);
 
+  const totalPaidMinor = payments
+    .filter((payment) => payment.status === "SUCCEEDED")
+    .reduce((sum, payment) => sum + payment.amountMinor, 0);
+
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">My payments</h1>
+      <PageHeader
+        title="Payments"
+        description="Everything the gym has recorded against your account."
+      />
 
-      <Card className="max-w-xl">
-        <CardHeader>
-          <CardTitle>Payment history</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {payments.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No payments on record.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Method</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {payments.map((payment) => (
-                  <TableRow key={payment.id}>
-                    <TableCell>{payment.paidAt.toLocaleDateString()}</TableCell>
-                    <TableCell className="font-medium">
-                      {formatMinorUnits(payment.amountMinor, payment.currency)}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {payment.method === "BANK_TRANSFER"
-                        ? "Bank transfer"
-                        : payment.method === "CASH"
-                          ? "Cash"
-                          : "Other"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={STATUS_VARIANT[payment.status]}>{payment.status}</Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      {payments.length === 0 ? (
+        <EmptyState
+          icon={CreditCard}
+          title="No payments on record"
+          description="Payments are recorded by the front desk when you pay for a membership."
+        />
+      ) : (
+        <>
+          <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
+            <p className="text-[0.8125rem] font-medium text-muted-foreground">Total paid</p>
+            <p className="mt-1 text-2xl leading-none font-semibold tracking-[-0.02em] tabular-nums">
+              {formatMinorUnits(totalPaidMinor)}
+            </p>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Across {payments.length} recorded payment{payments.length === 1 ? "" : "s"}
+            </p>
+          </div>
+
+          <ul className="flex flex-col gap-2">
+            {payments.map((payment) => (
+              <li
+                key={payment.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-xs"
+              >
+                <div className="flex min-w-0 flex-col gap-0.5">
+                  <span className="text-sm font-semibold tabular-nums">
+                    {formatMinorUnits(payment.amountMinor, payment.currency)}
+                  </span>
+                  <span className="text-[0.8125rem] text-muted-foreground">
+                    {payment.paidAt.toLocaleDateString(undefined, {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}{" "}
+                    · {paymentMethodLabel(payment.method)}
+                  </span>
+                </div>
+                <StatusBadge kind="payment" status={payment.status} size="sm" />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   );
 }

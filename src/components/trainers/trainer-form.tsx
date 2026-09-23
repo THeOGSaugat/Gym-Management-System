@@ -2,9 +2,10 @@
 
 import { useActionState } from "react";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { ActionFeedback } from "@/components/ui/action-feedback";
+import { Field, FormActions, FormSection } from "@/components/ui/form-field";
 
 export type TrainerFormState = { error: string } | undefined;
 
@@ -33,98 +34,107 @@ export function TrainerForm({
 
   return (
     <form action={formAction} className="flex flex-col gap-6" noValidate>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="fullName">Full name</Label>
+      <FormSection
+        title="Account"
+        description={
+          mode === "create"
+            ? "How the trainer signs in. Email is their login."
+            : "Email is the trainer's login — changing it changes how they sign in."
+        }
+      >
+        <Field label="Full name" htmlFor="fullName">
           <Input
             id="fullName"
             name="fullName"
+            autoComplete="name"
             required
             disabled={pending}
             defaultValue={defaultValues?.fullName}
           />
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="email">Email</Label>
+        </Field>
+        <Field label="Email" htmlFor="email">
           <Input
             id="email"
             name="email"
             type="email"
+            inputMode="email"
+            autoComplete="email"
             required
             disabled={pending}
             defaultValue={defaultValues?.email}
           />
-        </div>
-        {mode === "create" && (
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="password">Initial password</Label>
+        </Field>
+        {mode === "create" ? (
+          <Field
+            label="Initial password"
+            htmlFor="password"
+            hint="At least 8 characters. Ask the trainer to change it after their first login."
+          >
             <Input
               id="password"
               name="password"
               type="password"
+              autoComplete="new-password"
               required
               minLength={8}
               disabled={pending}
-              placeholder="At least 8 characters"
+              aria-describedby="password-hint"
             />
-            <p className="text-xs text-muted-foreground">
-              Tell the trainer to change this after their first login.
-            </p>
-          </div>
-        )}
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="phone">Phone</Label>
+          </Field>
+        ) : null}
+        <Field label="Phone" htmlFor="phone" optional>
           <Input
             id="phone"
             name="phone"
             type="tel"
+            inputMode="tel"
+            autoComplete="tel"
             disabled={pending}
             defaultValue={defaultValues?.phone}
           />
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="specialization">Specialization</Label>
+        </Field>
+      </FormSection>
+
+      <FormSection
+        title="Coaching profile"
+        description="Shown to admins when choosing who to assign a member to."
+      >
+        <Field label="Specialization" htmlFor="specialization" optional>
           <Input
             id="specialization"
             name="specialization"
-            placeholder="Strength & conditioning, yoga, ..."
+            placeholder="e.g. Strength & conditioning"
             disabled={pending}
             defaultValue={defaultValues?.specialization}
           />
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="experienceYears">Years of experience</Label>
+        </Field>
+        <Field label="Years of experience" htmlFor="experienceYears" optional>
           <Input
             id="experienceYears"
             name="experienceYears"
             type="number"
+            inputMode="numeric"
             min={0}
             step={1}
             disabled={pending}
             defaultValue={defaultValues?.experienceYears}
           />
-        </div>
-      </div>
+        </Field>
+        <Field label="Bio" htmlFor="bio" optional className="sm:col-span-2">
+          <Textarea
+            id="bio"
+            name="bio"
+            rows={3}
+            disabled={pending}
+            defaultValue={defaultValues?.bio}
+          />
+        </Field>
+      </FormSection>
 
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="bio">Bio</Label>
-        <Textarea
-          id="bio"
-          name="bio"
-          rows={3}
-          disabled={pending}
-          defaultValue={defaultValues?.bio}
-        />
-      </div>
+      {state?.error ? <ActionFeedback tone="error">{state.error}</ActionFeedback> : null}
 
-      {state?.error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {state.error}
-        </p>
-      ) : null}
-
-      <div>
-        <Button type="submit" disabled={pending}>
+      <FormActions>
+        <Button type="submit" disabled={pending} className="w-full sm:w-auto">
           {pending
             ? mode === "create"
               ? "Creating…"
@@ -133,7 +143,7 @@ export function TrainerForm({
               ? "Create trainer"
               : "Save changes"}
         </Button>
-      </div>
+      </FormActions>
     </form>
   );
 }

@@ -1,15 +1,12 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Users } from "lucide-react";
 import { requireRole } from "@/lib/auth/session";
 import { listAssignedMembers } from "@/server/services/assignment.service";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { listWorkoutPlansForTrainer } from "@/server/services/workout.service";
+import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/ui/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ListCard } from "@/components/ui/list-card";
 
 export const metadata: Metadata = {
   title: "My members",
@@ -21,53 +18,58 @@ export default async function TrainerAssignedMembersPage() {
   // listAssignedMembers enforces "self only" itself (canViewTrainerRoster)
   // — passing actor.id here isn't a bypassable shortcut, it's the only
   // roster this page is capable of requesting.
-  const assignments = await listAssignedMembers(actor, actor.id);
+  const [assignments, plans] = await Promise.all([
+    listAssignedMembers(actor, actor.id),
+    listWorkoutPlansForTrainer(actor),
+  ]);
+  const activePlanCount = new Map<string, number>();
+  for (const plan of plans) {
+    if (plan.status !== "ACTIVE") continue;
+    activePlanCount.set(plan.memberId, (activePlanCount.get(plan.memberId) ?? 0) + 1);
+  }
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">My members</h1>
-        <p className="text-muted-foreground">
-          {assignments.length} assigned member{assignments.length === 1 ? "" : "s"}
-        </p>
-      </div>
+      <PageHeader
+        title="My members"
+        description={`${assignments.length} assigned member${assignments.length === 1 ? "" : "s"}`}
+      />
 
       {assignments.length === 0 ? (
-        <div className="rounded-lg border border-dashed py-16 text-center text-muted-foreground">
-          No members are currently assigned to you.
-        </div>
+        <EmptyState
+          icon={Users}
+          title="No members assigned"
+          description="An admin assigns members to you from a member's detail page. They'll appear here as soon as they do."
+        />
       ) : (
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Member</TableHead>
-                <TableHead>Member #</TableHead>
-                <TableHead>Assigned since</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {assignments.map((assignment) => (
-                <TableRow key={assignment.id}>
-                  <TableCell className="font-medium">
-                    <Link
-                      href={`/trainer/members/${assignment.memberId}`}
-                      className="hover:underline"
-                    >
-                      {assignment.member.fullName}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {assignment.member.memberProfile?.memberNumber ?? "—"}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {assignment.startDate.toLocaleDateString()}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <ul className="flex flex-col gap-2">
+          {assignments.map((assignment) => (
+            <li key={assignment.id}>
+              <ListCard
+                href={`/trainer/members/${assignment.memberId}`}
+                avatarName={assignment.member.fullName}
+                title={assignment.member.fullName}
+                subtitle={
+                  assignment.member.memberProfile?.memberNumber
+                    ? `Member #${assignment.member.memberProfile.memberNumber}`
+                    : undefined
+                }
+                meta={`Assigned since ${assignment.startDate.toLocaleDateString()}`}
+                trailing={
+                  activePlanCount.get(assignment.memberId) ? (
+                    <Badge variant="success" size="sm">
+                      Active plan
+                    </Badge>
+                  ) : (
+                    <Badge variant="warning" size="sm">
+                      No plan
+                    </Badge>
+                  )
+                }
+              />
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

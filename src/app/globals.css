@@ -2,6 +2,14 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/*
+ * Dark mode is deliberately NOT shipped in this phase (see README, "How the
+ * design system works"). The `dark` variant is kept pointing at a `.dark`
+ * class that nothing ever sets, so the `dark:` utilities still present in the
+ * vendored shadcn/base-ui primitives compile to inert CSS rather than
+ * silently activating a half-built dark theme via prefers-color-scheme.
+ * New components in this codebase should not add `dark:` utilities.
+ */
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -10,35 +18,58 @@
   --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
+
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
+  --color-border-strong: var(--border-strong);
+
   --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-primary-subtle-foreground: var(--primary-subtle-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  /* Semantic status colors. Each has a solid tone (for bars/dots/solid
+     emphasis), a subtle surface (for badges and callouts) and a readable
+     foreground for text on that subtle surface. */
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-subtle: var(--success-subtle);
+  --color-success-border: var(--success-border);
+
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-warning-border: var(--warning-border);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-subtle: var(--destructive-subtle);
+  --color-destructive-border: var(--destructive-border);
+
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-subtle: var(--info-subtle);
+  --color-info-border: var(--info-border);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -46,75 +77,74 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  --shadow-xs: 0 1px 2px 0 oklch(0.2 0.02 265 / 0.04);
+  --shadow-sm:
+    0 1px 2px 0 oklch(0.2 0.02 265 / 0.05), 0 1px 3px 0 oklch(0.2 0.02 265 / 0.05);
+  --shadow-md:
+    0 2px 4px -2px oklch(0.2 0.02 265 / 0.06), 0 4px 10px -2px oklch(0.2 0.02 265 / 0.08);
+  --shadow-lg:
+    0 8px 24px -8px oklch(0.2 0.02 265 / 0.14), 0 2px 6px -2px oklch(0.2 0.02 265 / 0.06);
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  /* Neutrals: a very slightly cool grey ramp so white cards read as raised
+     surfaces against the page rather than blending into it. */
+  --background: oklch(0.984 0.002 265);
+  --foreground: oklch(0.19 0.012 265);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.19 0.012 265);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
+  --popover-foreground: oklch(0.19 0.012 265);
+  --muted: oklch(0.964 0.004 265);
+  --muted-foreground: oklch(0.523 0.018 265);
+  --accent: oklch(0.964 0.004 265);
+  --accent-foreground: oklch(0.24 0.014 265);
+  --secondary: oklch(0.955 0.005 265);
+  --secondary-foreground: oklch(0.26 0.014 265);
+  --border: oklch(0.916 0.006 265);
+  --border-strong: oklch(0.86 0.008 265);
+  --input: oklch(0.888 0.008 265);
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* Brand: one confident azure-indigo. Used for primary actions, active
+     navigation and informational status — deliberately the only non-neutral
+     hue in the chrome of the app. */
+  --primary: oklch(0.53 0.185 264);
+  --primary-foreground: oklch(0.99 0.002 265);
+  --primary-subtle: oklch(0.958 0.024 264);
+  --primary-subtle-foreground: oklch(0.44 0.17 264);
+  --ring: oklch(0.53 0.185 264);
+
+  --success: oklch(0.58 0.14 155);
+  --success-foreground: oklch(0.36 0.1 155);
+  --success-subtle: oklch(0.955 0.038 155);
+  --success-border: oklch(0.86 0.07 155);
+
+  --warning: oklch(0.72 0.15 72);
+  --warning-foreground: oklch(0.44 0.11 62);
+  --warning-subtle: oklch(0.965 0.045 82);
+  --warning-border: oklch(0.87 0.09 78);
+
+  /* L 0.53 (not 0.577) keeps white button text above WCAG AA 4.5:1. */
+  --destructive: oklch(0.53 0.2 27);
+  --destructive-foreground: oklch(0.45 0.17 27);
+  --destructive-subtle: oklch(0.962 0.024 25);
+  --destructive-border: oklch(0.87 0.06 25);
+
+  --info: oklch(0.53 0.185 264);
+  --info-foreground: oklch(0.44 0.17 264);
+  --info-subtle: oklch(0.958 0.024 264);
+  --info-border: oklch(0.86 0.06 264);
+
+  /* Chart ramp: brand-led, stepping down in chroma rather than jumping hue,
+     so a multi-series chart still reads as one system. */
+  --chart-1: oklch(0.53 0.185 264);
+  --chart-2: oklch(0.63 0.13 245);
+  --chart-3: oklch(0.7 0.09 230);
+  --chart-4: oklch(0.78 0.06 250);
+  --chart-5: oklch(0.86 0.035 265);
+
+  --radius: 0.625rem;
 }
 
 @layer base {
@@ -123,8 +153,68 @@
   }
   body {
     @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
   }
   html {
     @apply font-sans;
+    /* Keep in-page anchors (section tabs, skip link) clear of the sticky header. */
+    scroll-padding-top: 5rem;
+  }
+  /* A visible, consistent focus ring for keyboard users on every interactive
+     element, including the ones that only render as links. */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+}
+
+@layer utilities {
+  /* Expands the *hit* area of a visually compact control to a comfortable
+     touch target without changing how large it looks. Used on icon buttons
+     and inline row actions. */
+  .tap-target {
+    position: relative;
+  }
+  .tap-target::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    translate: -50% -50%;
+    width: 100%;
+    height: 100%;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Horizontal scrollers (section tabs, filter rows) shouldn't show a
+     scrollbar on desktop while staying swipeable on touch. */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Bottom navigation and sticky action bars must clear the iOS home
+     indicator. */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .h-safe-bottom {
+    height: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/* Motion is used only for entrances and state changes; anyone who has asked
+   their OS to reduce motion gets none of it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

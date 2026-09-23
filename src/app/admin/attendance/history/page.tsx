@@ -1,10 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { CalendarCheck, Search } from "lucide-react";
 import { requireRole } from "@/lib/auth/session";
 import { listAttendanceHistory } from "@/server/services/attendance.service";
-import { Input } from "@/components/ui/input";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
+import { ListCard } from "@/components/ui/list-card";
+import { Pagination } from "@/components/ui/pagination";
+import { StatusBadge } from "@/components/ui/status-badge";
 import {
   Table,
   TableBody,
@@ -42,132 +47,155 @@ export default async function AttendanceHistoryPage({
     page,
   });
 
-  function buildHref(overrides: { page?: number }) {
+  function buildHref(nextPage: number) {
     const next = new URLSearchParams();
     if (search) next.set("q", search);
     if (params.from) next.set("from", params.from);
     if (params.to) next.set("to", params.to);
-    const p = overrides.page ?? page;
-    if (p > 1) next.set("page", String(p));
+    if (nextPage > 1) next.set("page", String(nextPage));
     const qs = next.toString();
     return qs ? `/admin/attendance/history?${qs}` : "/admin/attendance/history";
   }
 
+  const hasFilters = !!(search || params.from || params.to);
+
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Attendance history</h1>
-          <p className="text-muted-foreground">{total} record{total === 1 ? "" : "s"}</p>
-        </div>
-        <Button variant="outline" nativeButton={false} render={<Link href="/admin/attendance">Today</Link>} />
-      </div>
+      <PageHeader
+        backHref="/admin/attendance"
+        backLabel="Today"
+        title="Attendance history"
+        description={`${total} record${total === 1 ? "" : "s"}`}
+      />
 
-      <form className="flex flex-wrap items-end gap-3" method="GET">
-        <div className="flex flex-col gap-1.5">
+      <form method="GET" className="flex flex-wrap items-end gap-2">
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:max-w-xs">
           <label htmlFor="q" className="text-sm font-medium">
-            Search
+            Member
           </label>
-          <Input id="q" name="q" placeholder="Member name or email" defaultValue={search ?? ""} className="w-56" />
+          <Input id="q" name="q" placeholder="Name or email" defaultValue={search ?? ""} />
         </div>
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-1 flex-col gap-1.5 sm:max-w-40">
           <label htmlFor="from" className="text-sm font-medium">
             From
           </label>
           <Input id="from" name="from" type="date" defaultValue={params.from ?? ""} />
         </div>
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-1 flex-col gap-1.5 sm:max-w-40">
           <label htmlFor="to" className="text-sm font-medium">
             To
           </label>
           <Input id="to" name="to" type="date" defaultValue={params.to ?? ""} />
         </div>
-        <Button type="submit" variant="outline">
-          Apply
-        </Button>
-        {(search || params.from || params.to) && (
-          <Button variant="ghost" nativeButton={false} render={<Link href="/admin/attendance/history">Clear</Link>} />
-        )}
+        <div className="flex gap-2">
+          <Button type="submit" variant="outline">
+            <Search aria-hidden="true" />
+            Apply
+          </Button>
+          {hasFilters ? (
+            <Button
+              variant="ghost"
+              nativeButton={false}
+              render={<Link href="/admin/attendance/history">Clear</Link>}
+            />
+          ) : null}
+        </div>
       </form>
 
       {items.length === 0 ? (
-        <div className="rounded-lg border border-dashed py-16 text-center text-muted-foreground">
-          {search || dateFrom || dateTo ? "No attendance matches your search." : "No attendance recorded yet."}
-        </div>
+        <EmptyState
+          icon={CalendarCheck}
+          title={hasFilters ? "No records match these filters" : "No attendance recorded yet"}
+          description={
+            hasFilters
+              ? "Try widening the date range or clearing the member search."
+              : "Check-ins appear here as soon as members start using the gym."
+          }
+          action={
+            hasFilters ? (
+              <Button
+                size="sm"
+                variant="outline"
+                nativeButton={false}
+                render={<Link href="/admin/attendance/history">Clear filters</Link>}
+              />
+            ) : undefined
+          }
+        />
       ) : (
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Member</TableHead>
-                <TableHead>Check in</TableHead>
-                <TableHead>Check out</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((record) => (
-                <TableRow key={record.id}>
-                  <TableCell className="text-muted-foreground">
-                    {record.attendanceDate.toLocaleDateString()}
-                  </TableCell>
-                  <TableCell className="font-medium">
-                    <Link href={`/admin/members/${record.memberId}`} className="hover:underline">
-                      {record.member.fullName}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatTime(record.checkInAt)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {record.checkOutAt ? formatTime(record.checkOutAt) : "—"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={record.checkOutAt ? "outline" : "default"}>
-                      {record.checkOutAt ? "Checked out" : "Checked in"}
-                    </Badge>
-                  </TableCell>
+        <>
+          <ul className="flex flex-col gap-2 md:hidden">
+            {items.map((record) => (
+              <li key={record.id}>
+                <ListCard
+                  href={`/admin/members/${record.memberId}`}
+                  avatarName={record.member.fullName}
+                  title={record.member.fullName}
+                  subtitle={record.attendanceDate.toLocaleDateString()}
+                  meta={
+                    record.checkOutAt
+                      ? `${formatTime(record.checkInAt)} – ${formatTime(record.checkOutAt)}`
+                      : `In since ${formatTime(record.checkInAt)}`
+                  }
+                  trailing={
+                    <StatusBadge
+                      kind="attendance"
+                      status={record.checkOutAt ? "CHECKED_OUT" : "CHECKED_IN"}
+                      size="sm"
+                    />
+                  }
+                />
+              </li>
+            ))}
+          </ul>
+
+          <div className="hidden overflow-hidden rounded-xl border border-border bg-card shadow-xs md:block">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/40 hover:bg-muted/40">
+                  <TableHead className="px-4">Member</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Check in</TableHead>
+                  <TableHead>Check out</TableHead>
+                  <TableHead className="px-4">Status</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+              <TableBody>
+                {items.map((record) => (
+                  <TableRow key={record.id}>
+                    <TableCell className="px-4 font-medium">
+                      <Link
+                        href={`/admin/members/${record.memberId}`}
+                        className="hover:text-primary hover:underline"
+                      >
+                        {record.member.fullName}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {record.attendanceDate.toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground tabular-nums">
+                      {formatTime(record.checkInAt)}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground tabular-nums">
+                      {record.checkOutAt ? formatTime(record.checkOutAt) : "—"}
+                    </TableCell>
+                    <TableCell className="px-4">
+                      <StatusBadge
+                        kind="attendance"
+                        status={record.checkOutAt ? "CHECKED_OUT" : "CHECKED_IN"}
+                        size="sm"
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </>
       )}
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            Page {page} of {totalPages}
-          </p>
-          <div className="flex gap-2">
-            {page <= 1 ? (
-              <Button variant="outline" size="sm" disabled>
-                Previous
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                nativeButton={false}
-                render={<Link href={buildHref({ page: page - 1 })}>Previous</Link>}
-              />
-            )}
-            {page >= totalPages ? (
-              <Button variant="outline" size="sm" disabled>
-                Next
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                nativeButton={false}
-                render={<Link href={buildHref({ page: page + 1 })}>Next</Link>}
-              />
-            )}
-          </div>
-        </div>
-      )}
+      <Pagination page={page} totalPages={totalPages} buildHref={buildHref} />
     </div>
   );
 }

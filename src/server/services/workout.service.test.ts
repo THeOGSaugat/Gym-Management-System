@@ -6,6 +6,7 @@ import {
   updateWorkoutPlan,
   setWorkoutPlanStatus,
   listWorkoutPlansForMember,
+  listWorkoutPlansForTrainer,
   addWorkoutDay,
   updateWorkoutDay,
   removeWorkoutDay,
@@ -172,6 +173,23 @@ describe("createWorkoutPlan (trainer creating a workout)", () => {
           linkUrl: "/member/workout-plans/plan-1",
         }),
       }),
+    );
+  });
+});
+
+describe("listWorkoutPlansForTrainer", () => {
+  it("throws ForbiddenError for an admin or a member", async () => {
+    await expect(listWorkoutPlansForTrainer(admin)).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(listWorkoutPlansForTrainer(member)).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it("scopes the query to the acting trainer's own plans", async () => {
+    prismaMock.workoutPlan.findMany.mockResolvedValue([planRow()]);
+
+    await listWorkoutPlansForTrainer(trainer);
+
+    expect(prismaMock.workoutPlan.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { trainerId: "trainer-1" } }),
     );
   });
 });

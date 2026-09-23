@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireRole } from "@/lib/auth/session";
 import { listNotifications } from "@/server/services/notification.service";
+import { PageHeader } from "@/components/ui/page-header";
 import { NotificationList } from "@/components/notifications/notification-list";
 import { markNotificationReadAction, markAllNotificationsReadAction } from "./actions";
 
@@ -15,7 +16,7 @@ export default async function MemberNotificationsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Notifications</h1>
+      <PageHeader title="Notifications" />
       <NotificationList
         notifications={notifications}
         markAsReadAction={markNotificationReadAction}

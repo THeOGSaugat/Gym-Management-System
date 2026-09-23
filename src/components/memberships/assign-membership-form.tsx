@@ -1,9 +1,11 @@
 "use client";
 
 import { useActionState } from "react";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { NativeSelect } from "@/components/ui/native-select";
+import { ActionFeedback } from "@/components/ui/action-feedback";
+import { Field, FormActions, FormSection } from "@/components/ui/form-field";
 import { formatMinorUnits } from "@/lib/money";
 import type { AssignMembershipState } from "@/app/admin/members/[id]/memberships/actions";
 
@@ -29,46 +31,45 @@ export function AssignMembershipForm({
 
   return (
     <form action={formAction} className="flex flex-col gap-6" noValidate>
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="planId">Plan</Label>
-        <select
-          id="planId"
-          name="planId"
-          required
-          disabled={pending}
-          className="h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-        >
-          <option value="" disabled defaultValue="">
-            Select a plan
-          </option>
-          {plans.map((plan) => (
-            <option key={plan.id} value={plan.id}>
-              {plan.name} — {plan.durationDays} days — {formatMinorUnits(plan.priceMinor, plan.currency)}
+      <FormSection title="Membership">
+        <Field label="Plan" htmlFor="planId" className="sm:col-span-2">
+          <NativeSelect id="planId" name="planId" required disabled={pending} defaultValue="">
+            <option value="" disabled>
+              Select a plan
             </option>
-          ))}
-        </select>
-      </div>
+            {plans.map((plan) => (
+              <option key={plan.id} value={plan.id}>
+                {plan.name} — {plan.durationDays} days —{" "}
+                {formatMinorUnits(plan.priceMinor, plan.currency)}
+              </option>
+            ))}
+          </NativeSelect>
+        </Field>
+        <Field
+          label="Start date"
+          htmlFor="startDate"
+          optional
+          hint="Leave blank to start today. A future date creates a scheduled (pending) membership."
+          className="sm:col-span-2"
+        >
+          <Input
+            id="startDate"
+            name="startDate"
+            type="date"
+            disabled={pending}
+            aria-describedby="startDate-hint"
+            className="sm:max-w-60"
+          />
+        </Field>
+      </FormSection>
 
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="startDate">Start date</Label>
-        <Input id="startDate" name="startDate" type="date" disabled={pending} />
-        <p className="text-xs text-muted-foreground">
-          Leave blank to start today. A future date creates a scheduled
-          (pending) membership.
-        </p>
-      </div>
+      {state?.error ? <ActionFeedback tone="error">{state.error}</ActionFeedback> : null}
 
-      {state?.error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {state.error}
-        </p>
-      ) : null}
-
-      <div>
-        <Button type="submit" disabled={pending}>
+      <FormActions>
+        <Button type="submit" disabled={pending} className="w-full sm:w-auto">
           {pending ? "Assigning…" : "Assign membership"}
         </Button>
-      </div>
+      </FormActions>
     </form>
   );
 }

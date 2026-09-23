@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { CalendarCheck, ClipboardList, Plus, TrendingUp } from "lucide-react";
 import { requireRole } from "@/lib/auth/session";
 import {
   getAssignedMember,
@@ -9,34 +10,22 @@ import {
 import { listWorkoutPlansForMember } from "@/server/services/workout.service";
 import { listProgressForMember } from "@/server/services/progress.service";
 import { handlePageError } from "@/lib/service-error";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { formatMetricValue, metricLabel } from "@/lib/progress-display";
+import { ProgressSummary } from "@/components/progress/progress-summary";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ListCard } from "@/components/ui/list-card";
+import { DetailGrid, DetailItem, Section } from "@/components/ui/section";
+import { SectionTabs } from "@/components/ui/section-tabs";
+import { StatusBadge } from "@/components/ui/status-badge";
 
 export const metadata: Metadata = {
-  title: "Member details",
+  title: "Member",
 };
 
-const MEMBERSHIP_STATUS_VARIANT = {
-  ACTIVE: "default",
-  PENDING: "secondary",
-  EXPIRED: "outline",
-  CANCELLED: "outline",
-} as const;
-
-const PLAN_STATUS_VARIANT = {
-  ACTIVE: "default",
-  COMPLETED: "outline",
-  CANCELLED: "outline",
-} as const;
+type Tab = "overview" | "training" | "progress";
 
 function formatTime(date: Date): string {
   return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -44,11 +33,16 @@ function formatTime(date: Date): string {
 
 export default async function TrainerAssignedMemberDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ section?: string }>;
 }) {
   const actor = await requireRole("TRAINER");
   const { id } = await params;
+  const query = await searchParams;
+  const tab: Tab =
+    query.section === "training" ? "training" : query.section === "progress" ? "progress" : "overview";
 
   const member = await getAssignedMember(actor, id).catch(handlePageError);
   const [attendance, membershipStatus, workoutPlans, progressLogs] = await Promise.all([
@@ -58,173 +52,214 @@ export default async function TrainerAssignedMemberDetailPage({
     listProgressForMember(actor, id),
   ]);
 
+  const base = `/trainer/members/${id}`;
+  const activePlans = workoutPlans.filter((plan) => plan.status === "ACTIVE");
+
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <Button
-          variant="ghost"
-          size="sm"
-          nativeButton={false}
-          render={<Link href="/trainer/members">← Back to my members</Link>}
-        />
-      </div>
-
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{member.fullName}</h1>
-        <p className="text-muted-foreground">
-          Member #{member.memberNumber ?? "—"} · Joined {member.joinDate.toLocaleDateString()}
-        </p>
-      </div>
-
-      <Card className="max-w-xl">
-        <CardHeader>
-          <CardTitle>Contact</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <p className="text-sm text-muted-foreground">Email</p>
-            <p>{member.email}</p>
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">Phone</p>
-            <p>{member.phone ?? "Not on file"}</p>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="max-w-xl">
-        <CardHeader>
-          <CardTitle>Membership status</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {membershipStatus.current ? (
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-3">
-                <p className="font-medium">{membershipStatus.current.planName}</p>
-                <Badge variant={MEMBERSHIP_STATUS_VARIANT[membershipStatus.current.status]}>
-                  {membershipStatus.current.status}
-                </Badge>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                {membershipStatus.current.startDate.toLocaleDateString()} –{" "}
-                {membershipStatus.current.endDate.toLocaleDateString()}
-              </p>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">No membership on record.</p>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="max-w-xl">
-        <CardHeader>
-          <CardTitle>Recent attendance</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {attendance.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No attendance on record yet.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Check in</TableHead>
-                  <TableHead>Check out</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {attendance.map((record) => (
-                  <TableRow key={record.id}>
-                    <TableCell>{record.attendanceDate.toLocaleDateString()}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {formatTime(record.checkInAt)}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {record.checkOutAt ? formatTime(record.checkOutAt) : "—"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="max-w-xl">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Workout plans</CardTitle>
+      <PageHeader
+        backHref="/trainer/members"
+        backLabel="My members"
+        title={member.fullName}
+        badge={<StatusBadge kind="account" status={member.status} />}
+        description={
+          <>
+            Member #{member.memberNumber ?? "—"} · Joined{" "}
+            {member.joinDate.toLocaleDateString()}
+          </>
+        }
+        actions={
           <Button
-            size="sm"
             nativeButton={false}
-            render={<Link href={`/trainer/members/${id}/workout-plans/new`}>New plan</Link>}
+            render={
+              <Link href={`${base}/workout-plans/new`}>
+                <Plus aria-hidden="true" />
+                New plan
+              </Link>
+            }
           />
-        </CardHeader>
-        <CardContent>
-          {workoutPlans.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No workout plans yet.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Dates</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {workoutPlans.map((plan) => (
-                  <TableRow key={plan.id}>
-                    <TableCell className="font-medium">
-                      <Link href={`/trainer/workout-plans/${plan.id}`} className="hover:underline">
-                        {plan.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {plan.startDate.toLocaleDateString()}
-                      {plan.endDate ? ` – ${plan.endDate.toLocaleDateString()}` : ""}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={PLAN_STATUS_VARIANT[plan.status]}>{plan.status}</Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+        }
+      />
 
-      <Card className="max-w-xl">
-        <CardHeader>
-          <CardTitle>Recent progress</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {progressLogs.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No progress logged yet.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Metric</TableHead>
-                  <TableHead>Value</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {progressLogs.slice(0, 10).map((log) => (
-                  <TableRow key={log.id}>
-                    <TableCell className="text-muted-foreground">
-                      {log.recordedAt.toLocaleDateString()}
-                    </TableCell>
-                    <TableCell>{log.metric === "CUSTOM" ? log.customLabel : log.metric}</TableCell>
-                    <TableCell className="font-medium">{log.value}</TableCell>
-                  </TableRow>
+      <SectionTabs
+        items={[
+          { label: "Overview", href: base, active: tab === "overview" },
+          {
+            label: "Training",
+            href: `${base}?section=training`,
+            active: tab === "training",
+            count: workoutPlans.length,
+          },
+          {
+            label: "Progress",
+            href: `${base}?section=progress`,
+            active: tab === "progress",
+            count: progressLogs.length,
+          },
+        ]}
+      />
+
+      {tab === "overview" ? (
+        <div className="flex flex-col gap-6">
+          <Card>
+            <CardContent>
+              <DetailGrid>
+                <DetailItem label="Email">
+                  <a href={`mailto:${member.email}`} className="hover:underline">
+                    {member.email}
+                  </a>
+                </DetailItem>
+                <DetailItem label="Phone">
+                  {member.phone ? (
+                    <a href={`tel:${member.phone}`} className="hover:underline">
+                      {member.phone}
+                    </a>
+                  ) : (
+                    <span className="text-muted-foreground">Not on file</span>
+                  )}
+                </DetailItem>
+              </DetailGrid>
+            </CardContent>
+          </Card>
+
+          <Section title="Membership">
+            {membershipStatus.current ? (
+              <Card>
+                <CardContent className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-base font-medium">{membershipStatus.current.planName}</p>
+                    <p className="text-[0.8125rem] text-muted-foreground">
+                      {membershipStatus.current.startDate.toLocaleDateString()} –{" "}
+                      {membershipStatus.current.endDate.toLocaleDateString()}
+                    </p>
+                  </div>
+                  <StatusBadge kind="membership" status={membershipStatus.current.status} />
+                </CardContent>
+              </Card>
+            ) : (
+              <EmptyState compact title="No membership on record" />
+            )}
+          </Section>
+
+          <Section
+            title="Recent visits"
+            description={`${attendance.length} recorded`}
+          >
+            {attendance.length === 0 ? (
+              <EmptyState
+                compact
+                icon={CalendarCheck}
+                title="No visits yet"
+                description="This member hasn't checked in."
+              />
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {attendance.slice(0, 8).map((record) => (
+                  <li
+                    key={record.id}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-xs"
+                  >
+                    <span className="text-sm font-medium">
+                      {record.attendanceDate.toLocaleDateString(undefined, {
+                        weekday: "short",
+                        day: "numeric",
+                        month: "short",
+                      })}
+                    </span>
+                    <span className="text-[0.8125rem] text-muted-foreground tabular-nums">
+                      {formatTime(record.checkInAt)}
+                      {record.checkOutAt ? ` – ${formatTime(record.checkOutAt)}` : ""}
+                    </span>
+                  </li>
                 ))}
-              </TableBody>
-            </Table>
+              </ul>
+            )}
+          </Section>
+        </div>
+      ) : null}
+
+      {tab === "training" ? (
+        <Section
+          title="Workout plans"
+          description={
+            workoutPlans.length > 0
+              ? `${activePlans.length} active of ${workoutPlans.length}`
+              : undefined
+          }
+        >
+          {workoutPlans.length === 0 ? (
+            <EmptyState
+              icon={ClipboardList}
+              title="No workout plans yet"
+              description="Build this member's first programme — days, exercises, sets and reps."
+              action={
+                <Button
+                  size="sm"
+                  nativeButton={false}
+                  render={<Link href={`${base}/workout-plans/new`}>Create a plan</Link>}
+                />
+              }
+            />
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {workoutPlans.map((plan) => (
+                <li key={plan.id}>
+                  <ListCard
+                    href={`/trainer/workout-plans/${plan.id}`}
+                    icon={ClipboardList}
+                    title={plan.name}
+                    subtitle={
+                      plan.endDate
+                        ? `${plan.startDate.toLocaleDateString()} – ${plan.endDate.toLocaleDateString()}`
+                        : `Started ${plan.startDate.toLocaleDateString()}`
+                    }
+                    trailing={<StatusBadge kind="plan" status={plan.status} size="sm" />}
+                  />
+                </li>
+              ))}
+            </ul>
           )}
-        </CardContent>
-      </Card>
+        </Section>
+      ) : null}
+
+      {tab === "progress" ? (
+        <Section
+          title="Progress"
+          description="Logged by the member themselves — you can view it, but only they can record it."
+        >
+          {progressLogs.length === 0 ? (
+            <EmptyState
+              icon={TrendingUp}
+              title="No progress logged"
+              description="This member hasn't recorded any measurements yet."
+            />
+          ) : (
+            <div className="flex flex-col gap-4">
+            <ProgressSummary logs={progressLogs} />
+            <ul className="flex flex-col gap-2">
+              {progressLogs.map((log) => (
+                <li
+                  key={log.id}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-xs"
+                >
+                  <div className="flex min-w-0 flex-col">
+                    <span className="truncate text-sm font-medium">
+                      {metricLabel(log.metric, log.customLabel)}
+                    </span>
+                    <span className="text-[0.8125rem] text-muted-foreground">
+                      {log.recordedAt.toLocaleDateString()}
+                    </span>
+                  </div>
+                  <span className="shrink-0 text-sm font-semibold tabular-nums">
+                    {formatMetricValue(log.metric, log.value)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            </div>
+          )}
+        </Section>
+      ) : null}
     </div>
   );
 }

@@ -2,9 +2,10 @@
 
 import { useActionState } from "react";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { ActionFeedback } from "@/components/ui/action-feedback";
+import { Field, FormActions, FormSection } from "@/components/ui/form-field";
 
 export type PlanFormState = { error: string } | undefined;
 
@@ -26,64 +27,64 @@ export function PlanForm({
 
   return (
     <form action={formAction} className="flex flex-col gap-6" noValidate>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="name">Plan name</Label>
+      <FormSection
+        title="Plan"
+        description={
+          mode === "edit"
+            ? "Changes apply to new and renewed memberships only — existing memberships keep the price and length they were sold at."
+            : undefined
+        }
+      >
+        <Field label="Plan name" htmlFor="name" className="sm:col-span-2">
           <Input
             id="name"
             name="name"
+            placeholder="e.g. Monthly"
             required
             disabled={pending}
             defaultValue={defaultValues?.name}
           />
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="durationDays">Duration (days)</Label>
+        </Field>
+        <Field label="Duration (days)" htmlFor="durationDays">
           <Input
             id="durationDays"
             name="durationDays"
             type="number"
+            inputMode="numeric"
             min={1}
             step={1}
             required
             disabled={pending}
             defaultValue={defaultValues?.durationDays}
           />
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="price">Price (USD)</Label>
+        </Field>
+        <Field label="Price (USD)" htmlFor="price">
           <Input
             id="price"
             name="price"
             type="text"
             inputMode="decimal"
-            placeholder="49.99"
+            placeholder="0.00"
             required
             disabled={pending}
             defaultValue={defaultValues?.price}
           />
-        </div>
-      </div>
+        </Field>
+        <Field label="Description" htmlFor="description" optional className="sm:col-span-2">
+          <Textarea
+            id="description"
+            name="description"
+            rows={3}
+            disabled={pending}
+            defaultValue={defaultValues?.description}
+          />
+        </Field>
+      </FormSection>
 
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="description">Description</Label>
-        <Textarea
-          id="description"
-          name="description"
-          rows={3}
-          disabled={pending}
-          defaultValue={defaultValues?.description}
-        />
-      </div>
+      {state?.error ? <ActionFeedback tone="error">{state.error}</ActionFeedback> : null}
 
-      {state?.error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {state.error}
-        </p>
-      ) : null}
-
-      <div>
-        <Button type="submit" disabled={pending}>
+      <FormActions>
+        <Button type="submit" disabled={pending} className="w-full sm:w-auto">
           {pending
             ? mode === "create"
               ? "Creating…"
@@ -92,7 +93,7 @@ export function PlanForm({
               ? "Create plan"
               : "Save changes"}
         </Button>
-      </div>
+      </FormActions>
     </form>
   );
 }

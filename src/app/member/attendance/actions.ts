@@ -20,7 +20,10 @@ export async function checkInAction(): Promise<AttendanceActionState> {
     throw error;
   }
 
+  // Both the attendance page and the member's home screen show live
+  // check-in state, so both are revalidated after the action.
   revalidatePath("/member/attendance");
+  revalidatePath("/member/dashboard");
   return undefined;
 }
 
@@ -35,5 +38,6 @@ export async function checkOutAction(): Promise<AttendanceActionState> {
   }
 
   revalidatePath("/member/attendance");
+  revalidatePath("/member/dashboard");
   return undefined;
 }

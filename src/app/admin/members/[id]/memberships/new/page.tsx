@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Tags } from "lucide-react";
 import { requireRole } from "@/lib/auth/session";
 import { getMember } from "@/server/services/member.service";
 import { listPlans } from "@/server/services/plan.service";
 import { handlePageError } from "@/lib/service-error";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { AssignMembershipForm } from "@/components/memberships/assign-membership-form";
 import { assignMembershipAction } from "../actions";
 
@@ -28,29 +31,33 @@ export default async function AssignMembershipPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        Assign membership to {member.fullName}
-      </h1>
+      <PageHeader
+        backHref={`/admin/members/${member.id}?section=membership`}
+        backLabel={member.fullName}
+        title="Assign membership"
+        description={`The price and duration are taken from the plan, not from this form — whatever ${member.fullName} is charged is snapshotted at assignment time.`}
+      />
 
-      <Card className="max-w-xl">
-        <CardHeader>
-          <CardTitle>Membership details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {plans.length === 0 ? (
-            <div className="flex flex-col gap-4">
-              <p className="text-sm text-muted-foreground">
-                There are no active plans to assign. Create one first.
-              </p>
-              <div>
-                <Button nativeButton={false} render={<Link href="/admin/plans/new">New plan</Link>} />
-              </div>
-            </div>
-          ) : (
+      {plans.length === 0 ? (
+        <EmptyState
+          icon={Tags}
+          title="No active plans"
+          description="A membership can only be assigned from an active plan. Create one first."
+          action={
+            <Button
+              size="sm"
+              nativeButton={false}
+              render={<Link href="/admin/plans/new">Create a plan</Link>}
+            />
+          }
+        />
+      ) : (
+        <Card className="max-w-2xl">
+          <CardContent>
             <AssignMembershipForm action={boundAction} plans={plans} />
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

@@ -42,6 +42,14 @@ This repository is being built in phases.
   check-ins, active workout plans, recent progress); a member gets a
   personal snapshot (membership status, current workout plan, recent
   attendance/progress). See "How dashboards & analytics work" below.
+- **Phase 9A (mobile-first UI/UX redesign)** — done: a real design system
+  (brand + semantic colour, type hierarchy, spacing, icons), a persistent
+  app shell per role (desktop sidebar, mobile bottom tab bar for
+  member/trainer, drawer for admin), confirmation dialogs in front of
+  every destructive action, responsive table→card lists, tabbed detail
+  pages, skeletons on every route, and 44px touch targets throughout —
+  with no change to the database, authorization, or Server Action
+  architecture. See "How the design system works" below.
 - **Phase 8 (notifications)** — done: in-app notifications for
   membership expiring/expired, a payment being recorded, a workout plan
   being assigned, and a trainer assignment (told to both sides) —
@@ -1039,6 +1047,78 @@ build, and fails loudly on type errors since TypeScript strict mode is on.
   a user with an ad-hoc message. Growing this list means adding a new
   enum value and a new, deliberate call site, not loosening a string
   field.
+
+## How the design system works
+
+Phase 9A rebuilt the presentation layer as a mobile-first product. No
+database model, authorization rule, service policy or Server Action
+contract changed as part of it (the one addition is a read,
+`listWorkoutPlansForTrainer`, which the trainer's new "Workout plans"
+destination needed and which grants no access `getWorkoutPlan` didn't
+already allow).
+
+- **Tokens live in `globals.css`.** The palette is neutral surfaces plus
+  exactly one brand hue (an azure-indigo), and four semantic families —
+  `success`, `warning`, `destructive`, `info` — each with a solid tone, a
+  subtle surface and a readable foreground. Status is never carried by
+  colour alone: `StatusBadge` pairs every colour with an icon *and* a
+  text label, which is also why every domain status now goes through that
+  one component instead of the per-page `STATUS_VARIANT` maps that used
+  to drift between screens.
+- **Dark mode is deliberately not shipped.** The old CSS defined a full
+  `.dark` palette that nothing could ever activate — there was no theme
+  provider and no toggle. Rather than leave that half-built, the dead
+  token block is gone and the `dark` variant stays pointed at a class
+  nothing sets, so the `dark:` utilities still baked into the vendored
+  shadcn primitives compile to inert CSS. New components don't add
+  `dark:` utilities. Shipping dark mode later means adding the tokens
+  back plus a provider and a toggle, deliberately.
+- **Navigation is role-shaped, defined once in `nav-config.ts`.** ADMIN
+  has too many destinations for a tab bar, so it gets a grouped sidebar
+  on desktop (People / Finance / Operations) and a drawer on mobile;
+  TRAINER and MEMBER get a bottom tab bar, because their sections are few
+  and task-shaped. The config holds Lucide icon *components*, so client
+  nav components take a `role` string and look the config up themselves —
+  passing the resolved items as props would try to serialise functions
+  across the server→client boundary and throw.
+- **Cards stopped being the default container.** `Section` groups related
+  content with a heading and no raised surface; cards are now reserved
+  for genuinely distinct objects and emphasis. Detail pages that used to
+  be a stack of same-weight cards (`/admin/members/[id]` had eight) are
+  now tabbed via `SectionTabs`, which is URL-driven (`?section=`) rather
+  than client state — so each section is deep-linkable, the back button
+  steps through them, and the page stays a Server Component.
+- **Destructive actions all run through `ConfirmAction`.** It wraps the
+  same Server Action in a Base UI alert dialog that states what will
+  happen, which object is affected, the consequences, and whether it can
+  be undone — a bottom sheet on phones, a centred dialog from `sm` up.
+  Worth knowing: because the dialog is client-rendered, destructive
+  actions now require JavaScript, where they were previously raw form
+  posts. That's the deliberate trade — every non-destructive flow
+  (including the zero-JS GET filter forms) stays progressively enhanced.
+- **Action feedback is server-rendered, not a toast.** `ActionFeedback`
+  renders a `role="status"` (or `role="alert"`) banner after a Server
+  Action re-renders the page. A toast library would have meant a client
+  provider and a second source of truth for "did that work", and toasts
+  disappear before a distracted user or a screen reader gets to them.
+- **Native `<select>` is kept on purpose**, now standardised as
+  `NativeSelect`. Every dropdown is either in a zero-JS GET filter form
+  or a Server Action form expected to work before hydration; a native
+  select submits with the form in both cases and gets the platform's own
+  picker on mobile. What was actually broken was that the same six
+  utility classes were copy-pasted into eight files at two different
+  heights — that's what the component fixes. The Base UI `Select` remains
+  available for a case that genuinely needs rich option rendering.
+- **Touch targets**: `Button`'s default is 40px and `lg` is 44px; the
+  visually compact sizes are paired with a `tap-target` utility that
+  expands the *hit* area to 44px without changing how large the control
+  looks. Inputs are 40px and use `text-base` below `md`, which stops iOS
+  Safari zooming the viewport on focus.
+- **Every route has a skeleton.** `loading.tsx` files build on
+  `PageSkeleton`/`ListSkeleton`/`StatGridSkeleton`/`CardSkeleton` so a
+  route transition resolves into roughly the layout that's arriving,
+  rather than a spinner. The heaviest pages (member detail, workout plan
+  detail) previously had none at all.
 
 ## Known simplifications (intentional, for a learning project)
 

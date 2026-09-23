@@ -1,6 +1,13 @@
 import * as React from "react"
 import { cn } from "cn"
 
+/**
+ * Cards are a deliberate emphasis device, not the default wrapper for every
+ * block on a page — see `Section` for grouping that shouldn't look raised.
+ * They read as raised surfaces because the page background is a slightly
+ * cool off-white while the card is pure white, so the elevation comes from
+ * contrast plus a hairline border rather than a heavy shadow.
+ */
 function Card({
   className,
   size = "default",
@@ -11,7 +18,7 @@ function Card({
       data-slot="card"
       data-size={size}
       className={cn(
-        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl bg-card py-(--card-spacing) text-sm text-card-foreground ring-1 ring-foreground/10 [--card-spacing:--spacing(4)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(3)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
+        "group/card flex flex-col gap-(--card-spacing) overflow-hidden rounded-xl border border-border bg-card py-(--card-spacing) text-sm text-card-foreground shadow-xs [--card-spacing:--spacing(5)] has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:[--card-spacing:--spacing(4)] data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
         className
       )}
       {...props}
@@ -37,7 +44,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-title"
       className={cn(
-        "font-heading text-base leading-snug font-medium group-data-[size=sm]/card:text-sm",
+        "font-heading text-base leading-snug font-semibold tracking-[-0.01em] text-foreground group-data-[size=sm]/card:text-sm",
         className
       )}
       {...props}
@@ -49,7 +56,7 @@ function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-description"
-      className={cn("text-sm text-muted-foreground", className)}
+      className={cn("text-[0.8125rem] leading-relaxed text-muted-foreground", className)}
       {...props}
     />
   )
@@ -83,7 +90,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-footer"
       className={cn(
-        "flex items-center rounded-b-xl border-t bg-muted/50 p-(--card-spacing)",
+        "flex items-center gap-2 rounded-b-xl border-t bg-muted/40 px-(--card-spacing) py-4",
         className
       )}
       {...props}

@@ -1,110 +1,116 @@
 import type { Metadata } from "next";
+import { CalendarCheck } from "lucide-react";
 import { requireRole } from "@/lib/auth/session";
 import { getTodayStatus, listAttendanceForMember } from "@/server/services/attendance.service";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { CheckInOutButton } from "@/components/attendance/check-in-out-button";
+import { PageHeader } from "@/components/ui/page-header";
+import { Pagination } from "@/components/ui/pagination";
+import { Section } from "@/components/ui/section";
+import { EmptyState } from "@/components/ui/empty-state";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { CheckInPanel } from "@/components/attendance/check-in-panel";
 import { checkInAction, checkOutAction } from "./actions";
 
 export const metadata: Metadata = {
-  title: "My attendance",
+  title: "Attendance",
 };
 
 function formatTime(date: Date): string {
   return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
-export default async function MyAttendancePage() {
+export default async function MyAttendancePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   const actor = await requireRole("MEMBER");
+  const { page: pageParam } = await searchParams;
+  const page = Math.max(1, Number(pageParam) || 1);
 
   const [{ openSession, todaysRecords }, history] = await Promise.all([
     getTodayStatus(actor, actor.id),
-    listAttendanceForMember(actor, actor.id),
+    listAttendanceForMember(actor, actor.id, page),
   ]);
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">My attendance</h1>
+      <PageHeader
+        title="Attendance"
+        description="Check in when you arrive and out when you leave."
+      />
 
-      <Card className="max-w-xl">
-        <CardHeader>
-          <CardTitle>Today</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex items-center gap-3">
-            <Badge variant={openSession ? "default" : "outline"}>
-              {openSession ? "Checked in" : "Not checked in"}
-            </Badge>
-            {openSession && (
-              <p className="text-sm text-muted-foreground">
-                Since {formatTime(openSession.checkInAt)}
-              </p>
-            )}
-          </div>
+      <CheckInPanel
+        isCheckedIn={!!openSession}
+        checkedInSince={openSession ? formatTime(openSession.checkInAt) : undefined}
+        checkInAction={checkInAction}
+        checkOutAction={checkOutAction}
+      />
 
-          <CheckInOutButton
-            isCheckedIn={!!openSession}
-            checkInAction={checkInAction}
-            checkOutAction={checkOutAction}
+      {todaysRecords.length > 0 ? (
+        <Section title="Today" description={`${todaysRecords.length} visit${todaysRecords.length === 1 ? "" : "s"}`}>
+          <ul className="flex flex-col gap-2">
+            {todaysRecords.map((record) => (
+              <li
+                key={record.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-xs"
+              >
+                <span className="text-sm font-medium tabular-nums">
+                  {formatTime(record.checkInAt)}
+                  {record.checkOutAt ? ` – ${formatTime(record.checkOutAt)}` : ""}
+                </span>
+                <StatusBadge
+                  kind="attendance"
+                  status={record.checkOutAt ? "CHECKED_OUT" : "CHECKED_IN"}
+                  size="sm"
+                />
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ) : null}
+
+      <Section
+        title="History"
+        description={history.total > 0 ? `${history.total} visits on record` : undefined}
+      >
+        {history.items.length === 0 ? (
+          <EmptyState
+            icon={CalendarCheck}
+            title="No visits yet"
+            description="Once you check in for the first time, your history builds up here."
           />
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {history.items.map((record) => (
+              <li
+                key={record.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-xs"
+              >
+                <div className="flex min-w-0 flex-col">
+                  <span className="text-sm font-medium">
+                    {record.attendanceDate.toLocaleDateString(undefined, {
+                      weekday: "short",
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </span>
+                  <span className="text-[0.8125rem] text-muted-foreground tabular-nums">
+                    {formatTime(record.checkInAt)}
+                    {record.checkOutAt ? ` – ${formatTime(record.checkOutAt)}` : " · still checked in"}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
 
-          {todaysRecords.length > 0 && (
-            <div className="border-t pt-4">
-              <p className="mb-2 text-sm font-medium">Today&apos;s visits</p>
-              <ul className="flex flex-col gap-1 text-sm text-muted-foreground">
-                {todaysRecords.map((record) => (
-                  <li key={record.id}>
-                    {formatTime(record.checkInAt)} –{" "}
-                    {record.checkOutAt ? formatTime(record.checkOutAt) : "still checked in"}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="max-w-xl">
-        <CardHeader>
-          <CardTitle>History</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {history.items.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No attendance on record yet.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Check in</TableHead>
-                  <TableHead>Check out</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {history.items.map((record) => (
-                  <TableRow key={record.id}>
-                    <TableCell>{record.attendanceDate.toLocaleDateString()}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {formatTime(record.checkInAt)}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {record.checkOutAt ? formatTime(record.checkOutAt) : "—"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      <Pagination
+        page={history.page}
+        totalPages={history.totalPages}
+        buildHref={(p) => (p > 1 ? `/member/attendance?page=${p}` : "/member/attendance")}
+      />
     </div>
   );
 }

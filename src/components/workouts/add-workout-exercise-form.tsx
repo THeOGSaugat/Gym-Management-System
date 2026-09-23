@@ -3,8 +3,10 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { NativeSelect } from "@/components/ui/native-select";
+import { ActionFeedback } from "@/components/ui/action-feedback";
+import { Field } from "@/components/ui/form-field";
 
 export type WorkoutExerciseFormState = { error: string } | undefined;
 
@@ -29,7 +31,7 @@ export function AddWorkoutExerciseForm({
     return (
       <p className="text-sm text-muted-foreground">
         No exercises in the library yet.{" "}
-        <Link href="/trainer/exercises/new" className="hover:underline">
+        <Link href="/trainer/exercises/new" className="font-medium text-primary hover:underline">
           Add one
         </Link>
         .
@@ -38,17 +40,9 @@ export function AddWorkoutExerciseForm({
   }
 
   return (
-    <form action={formAction} className="flex flex-col gap-3 rounded-lg border p-4">
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="exerciseId">Exercise</Label>
-        <select
-          id="exerciseId"
-          name="exerciseId"
-          required
-          disabled={pending}
-          defaultValue=""
-          className="h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-        >
+    <form action={formAction} className="flex flex-col gap-4" noValidate>
+      <Field label="Exercise" htmlFor="exerciseId">
+        <NativeSelect id="exerciseId" name="exerciseId" required disabled={pending} defaultValue="">
           <option value="" disabled>
             Select an exercise
           </option>
@@ -58,44 +52,35 @@ export function AddWorkoutExerciseForm({
               {exercise.muscleGroup ? ` (${exercise.muscleGroup})` : ""}
             </option>
           ))}
-        </select>
-      </div>
+        </NativeSelect>
+      </Field>
 
+      {/* Two columns even on a phone: these are short numeric inputs, and
+          seeing sets and reps side by side mirrors how they're read ("4 × 8"). */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="sets">Sets</Label>
-          <Input id="sets" name="sets" type="number" min={1} step={1} required disabled={pending} />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="reps">Reps</Label>
-          <Input id="reps" name="reps" type="number" min={1} step={1} required disabled={pending} />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="weightKg">Weight (kg)</Label>
-          <Input id="weightKg" name="weightKg" type="number" min={0} step="0.5" disabled={pending} />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="restSeconds">Rest (sec)</Label>
-          <Input id="restSeconds" name="restSeconds" type="number" min={0} step={1} disabled={pending} />
-        </div>
+        <Field label="Sets" htmlFor="sets">
+          <Input id="sets" name="sets" type="number" inputMode="numeric" min={1} step={1} required disabled={pending} />
+        </Field>
+        <Field label="Reps" htmlFor="reps">
+          <Input id="reps" name="reps" type="number" inputMode="numeric" min={1} step={1} required disabled={pending} />
+        </Field>
+        <Field label="Weight (kg)" htmlFor="weightKg" optional>
+          <Input id="weightKg" name="weightKg" type="number" inputMode="decimal" min={0} step="0.5" disabled={pending} />
+        </Field>
+        <Field label="Rest (sec)" htmlFor="restSeconds" optional>
+          <Input id="restSeconds" name="restSeconds" type="number" inputMode="numeric" min={0} step={1} disabled={pending} />
+        </Field>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="notes">Notes</Label>
-        <Input id="notes" name="notes" disabled={pending} placeholder="e.g. focus on control on the way down" />
-      </div>
+      <Field label="Coaching note" htmlFor="notes" optional>
+        <Input id="notes" name="notes" disabled={pending} placeholder="e.g. slow on the way down" />
+      </Field>
 
-      {state?.error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {state.error}
-        </p>
-      ) : null}
+      {state?.error ? <ActionFeedback tone="error">{state.error}</ActionFeedback> : null}
 
-      <div>
-        <Button type="submit" variant="outline" disabled={pending}>
-          {pending ? "Adding…" : "Add exercise"}
-        </Button>
-      </div>
+      <Button type="submit" disabled={pending} className="w-full sm:w-auto sm:self-start">
+        {pending ? "Adding…" : "Add exercise"}
+      </Button>
     </form>
   );
 }

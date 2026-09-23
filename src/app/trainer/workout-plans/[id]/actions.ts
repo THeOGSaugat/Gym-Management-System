@@ -1,5 +1,6 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
 import {
@@ -81,6 +82,9 @@ export async function removeWorkoutDayAction(planId: string, workoutDayId: strin
   const actor = await requireRole("TRAINER");
   await removeWorkoutDay(actor, workoutDayId);
   revalidatePath(`/trainer/workout-plans/${planId}`);
+  // Back to the day list: the URL still carries ?day=<the id just deleted>,
+  // which would otherwise leave the editor pointing at a day that's gone.
+  redirect(`/trainer/workout-plans/${planId}`);
 }
 
 export async function addWorkoutExerciseAction(

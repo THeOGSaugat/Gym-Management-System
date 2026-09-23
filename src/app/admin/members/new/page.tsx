@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireRole } from "@/lib/auth/session";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
+import { Card, CardContent } from "@/components/ui/card";
 import { MemberForm } from "@/components/members/member-form";
 import { createMemberAction } from "../actions";
 
@@ -13,11 +14,13 @@ export default async function NewMemberPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Add member</h1>
+      <PageHeader
+        backHref="/admin/members"
+        backLabel="Members"
+        title="Add member"
+        description="Creates the account and their member profile. You can assign a membership and a trainer once they exist."
+      />
       <Card className="max-w-2xl">
-        <CardHeader>
-          <CardTitle>Member details</CardTitle>
-        </CardHeader>
         <CardContent>
           <MemberForm mode="create" action={createMemberAction} />
         </CardContent>

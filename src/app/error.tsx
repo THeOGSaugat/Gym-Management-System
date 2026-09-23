@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
-import { Button } from "@/components/ui/button";
+import { AreaError } from "@/components/layout/area-error";
 
 /**
- * Root error boundary. Catches unexpected errors thrown while rendering
- * any route under this layout and shows a recoverable fallback instead of
- * a blank white screen.
+ * Root error boundary — the last resort, for errors outside any role area
+ * (the landing page, login). Errors inside /admin, /trainer and /member are
+ * caught earlier by those areas' own boundaries, which keep the app shell.
  */
 export default function GlobalError({
   error,
@@ -15,21 +14,5 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  useEffect(() => {
-    console.error("Unhandled render error:", error);
-  }, [error]);
-
-  return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 py-24 text-center sm:px-6">
-      <p className="text-sm font-medium text-muted-foreground">Error</p>
-      <h1 className="text-2xl font-semibold tracking-tight">
-        Something went wrong
-      </h1>
-      <p className="max-w-md text-muted-foreground">
-        An unexpected error occurred. You can try again, and if it keeps
-        happening, let us know.
-      </p>
-      <Button onClick={reset}>Try again</Button>
-    </div>
-  );
+  return <AreaError error={error} reset={reset} homeHref="/dashboard" />;
 }

@@ -2,14 +2,16 @@ import type { Metadata } from "next";
 import { requireRole } from "@/lib/auth/session";
 import { getExercise } from "@/server/services/exercise.service";
 import { handlePageError } from "@/lib/service-error";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
+import { Card, CardContent } from "@/components/ui/card";
+import { ConfirmAction } from "@/components/ui/confirm-action";
+import { Section } from "@/components/ui/section";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { ExerciseForm } from "@/components/exercises/exercise-form";
 import { updateExerciseAction, setExerciseActiveAction } from "../actions";
 
 export const metadata: Metadata = {
-  title: "Exercise details",
+  title: "Exercise",
 };
 
 export default async function ExerciseDetailPage({
@@ -28,52 +30,80 @@ export default async function ExerciseDetailPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">{exercise.name}</h1>
-        <Badge variant={exercise.isActive ? "default" : "outline"}>
-          {exercise.isActive ? "Active" : "Inactive"}
-        </Badge>
-      </div>
-
-      <Card className="max-w-2xl">
-        <CardHeader>
-          <CardTitle>Exercise details</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ExerciseForm
-            mode="edit"
-            action={boundUpdateAction}
-            defaultValues={{
-              name: exercise.name,
-              muscleGroup: exercise.muscleGroup ?? undefined,
-              description: exercise.description ?? undefined,
-              instructions: exercise.instructions ?? undefined,
-            }}
+      <PageHeader
+        backHref="/admin/exercises"
+        backLabel="Exercise library"
+        title={exercise.name}
+        badge={
+          <StatusBadge
+            kind="exercise"
+            status={exercise.isActive ? "ACTIVE" : "INACTIVE"}
           />
-        </CardContent>
-      </Card>
+        }
+        description={exercise.muscleGroup ?? "No muscle group set"}
+      />
 
-      <Card className="max-w-2xl border-destructive/30">
-        <CardHeader>
-          <CardTitle className="text-destructive">
-            {exercise.isActive ? "Deactivate exercise" : "Reactivate exercise"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between gap-4">
-            <p className="text-sm text-muted-foreground">
-              {exercise.isActive
-                ? "Deactivating removes it from the picker when building new workout days. Existing workout plans using it are unaffected."
-                : "Reactivating makes it selectable again when building workout days."}
-            </p>
-            <form action={toggleActiveAction}>
-              <Button type="submit" variant={exercise.isActive ? "destructive" : "outline"}>
-                {exercise.isActive ? "Deactivate" : "Reactivate"}
-              </Button>
-            </form>
-          </div>
-        </CardContent>
-      </Card>
+      <Section title="Exercise details">
+        <Card className="max-w-2xl">
+          <CardContent>
+            <ExerciseForm
+              mode="edit"
+              action={boundUpdateAction}
+              defaultValues={{
+                name: exercise.name,
+                muscleGroup: exercise.muscleGroup ?? undefined,
+                description: exercise.description ?? undefined,
+                instructions: exercise.instructions ?? undefined,
+              }}
+            />
+          </CardContent>
+        </Card>
+      </Section>
+
+      <Section title="Availability">
+        <Card className="max-w-2xl border-destructive-border">
+          <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-1">
+              <p className="text-sm font-medium">
+                {exercise.isActive ? "Deactivate exercise" : "Reactivate exercise"}
+              </p>
+              <p className="text-[0.8125rem] leading-relaxed text-muted-foreground">
+                {exercise.isActive
+                  ? "Removes it from the picker when building new workout days."
+                  : "Makes it selectable again when building workout days."}
+              </p>
+            </div>
+
+            {exercise.isActive ? (
+              <ConfirmAction
+                action={toggleActiveAction}
+                title={`Deactivate "${exercise.name}"?`}
+                description="Trainers won't be able to add this exercise to new workout days."
+                consequences={[
+                  "Workout plans that already prescribe it keep working and still show it.",
+                  "Nothing is deleted — this only hides it from the exercise picker.",
+                ]}
+                reversibility="Fully reversible — you can reactivate it from this page."
+                confirmLabel="Deactivate exercise"
+                triggerLabel="Deactivate"
+                triggerClassName="w-full sm:w-auto"
+              />
+            ) : (
+              <ConfirmAction
+                action={toggleActiveAction}
+                tone="default"
+                title={`Reactivate "${exercise.name}"?`}
+                description="Trainers will be able to add this exercise to workout days again."
+                reversibility="Reversible — you can deactivate it again later."
+                confirmLabel="Reactivate exercise"
+                triggerLabel="Reactivate"
+                triggerVariant="outline"
+                triggerClassName="w-full sm:w-auto"
+              />
+            )}
+          </CardContent>
+        </Card>
+      </Section>
     </div>
   );
 }

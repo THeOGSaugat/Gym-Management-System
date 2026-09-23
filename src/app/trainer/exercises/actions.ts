@@ -31,5 +31,7 @@ export async function createExerciseAction(
     throw error;
   }
 
-  redirect("/trainer/exercises/new?added=1");
+  // Back to the library, where the new entry is visible in context, with a
+  // server-rendered confirmation rather than a toast.
+  redirect("/trainer/exercises?added=1");
 }

@@ -2,6 +2,8 @@
 
 import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
+import { NativeSelect } from "@/components/ui/native-select";
+import { ActionFeedback } from "@/components/ui/action-feedback";
 import type { AssignTrainerState } from "@/app/admin/members/[id]/assignment/actions";
 
 type TrainerOption = {
@@ -32,13 +34,12 @@ export function AssignTrainerForm({
         <label htmlFor="trainerId" className="text-sm font-medium">
           Trainer
         </label>
-        <select
+        <NativeSelect
           id="trainerId"
           name="trainerId"
           required
           disabled={pending}
           defaultValue={currentTrainerId ?? ""}
-          className="h-9 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
         >
           <option value="" disabled>
             Select a trainer
@@ -49,11 +50,9 @@ export function AssignTrainerForm({
               {trainer.specialization ? ` — ${trainer.specialization}` : ""}
             </option>
           ))}
-        </select>
+        </NativeSelect>
         {state?.error ? (
-          <p role="alert" className="text-sm text-destructive">
-            {state.error}
-          </p>
+          <ActionFeedback tone="error">{state.error}</ActionFeedback>
         ) : null}
       </div>
       <Button type="submit" variant="outline" disabled={pending}>

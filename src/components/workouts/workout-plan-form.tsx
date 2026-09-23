@@ -2,9 +2,10 @@
 
 import { useActionState } from "react";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { ActionFeedback } from "@/components/ui/action-feedback";
+import { Field, FormActions, FormSection } from "@/components/ui/form-field";
 
 export type WorkoutPlanFormState = { error: string } | undefined;
 
@@ -29,43 +30,35 @@ export function WorkoutPlanForm({
 
   return (
     <form action={formAction} className="flex flex-col gap-6" noValidate>
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="name">Plan name</Label>
-        <Input
-          id="name"
-          name="name"
-          required
-          disabled={pending}
-          defaultValue={defaultValues?.name}
-          placeholder="Strength Block 1"
-        />
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="description">Description</Label>
-        <Textarea
-          id="description"
-          name="description"
-          rows={2}
-          disabled={pending}
-          defaultValue={defaultValues?.description}
-        />
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="startDate">Start date</Label>
+      <FormSection
+        title="Plan"
+        description={
+          mode === "create"
+            ? "You'll add training days and exercises once the plan exists."
+            : undefined
+        }
+      >
+        <Field label="Plan name" htmlFor="name" className="sm:col-span-2">
+          <Input
+            id="name"
+            name="name"
+            required
+            disabled={pending}
+            defaultValue={defaultValues?.name}
+            placeholder="e.g. Strength Block 1"
+          />
+        </Field>
+        <Field label="Start date" htmlFor="startDate" optional hint="Leave blank to start today.">
           <Input
             id="startDate"
             name="startDate"
             type="date"
             disabled={pending}
             defaultValue={defaultValues?.startDate}
+            aria-describedby="startDate-hint"
           />
-          <p className="text-xs text-muted-foreground">Leave blank to start today.</p>
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="endDate">End date (optional)</Label>
+        </Field>
+        <Field label="End date" htmlFor="endDate" optional>
           <Input
             id="endDate"
             name="endDate"
@@ -73,17 +66,29 @@ export function WorkoutPlanForm({
             disabled={pending}
             defaultValue={defaultValues?.endDate}
           />
-        </div>
-      </div>
+        </Field>
+        <Field
+          label="Description"
+          htmlFor="description"
+          optional
+          hint="What this block is for — the member sees this at the top of their plan."
+          className="sm:col-span-2"
+        >
+          <Textarea
+            id="description"
+            name="description"
+            rows={2}
+            disabled={pending}
+            defaultValue={defaultValues?.description}
+            aria-describedby="description-hint"
+          />
+        </Field>
+      </FormSection>
 
-      {state?.error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {state.error}
-        </p>
-      ) : null}
+      {state?.error ? <ActionFeedback tone="error">{state.error}</ActionFeedback> : null}
 
-      <div>
-        <Button type="submit" disabled={pending}>
+      <FormActions>
+        <Button type="submit" disabled={pending} className="w-full sm:w-auto">
           {pending
             ? mode === "create"
               ? "Creating…"
@@ -92,7 +97,7 @@ export function WorkoutPlanForm({
               ? "Create plan"
               : "Save changes"}
         </Button>
-      </div>
+      </FormActions>
     </form>
   );
 }

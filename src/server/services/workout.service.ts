@@ -157,6 +157,28 @@ export async function listWorkoutPlansForMember(actor: Actor, memberId: string) 
   });
 }
 
+/**
+ * Every plan this trainer has authored, active ones first.
+ *
+ * Added for the trainer's "Workout plans" navigation destination: before
+ * this, a trainer could only reach a plan by first opening the member it
+ * belongs to, which made "what programmes am I running" unanswerable. It is
+ * a pure read over rows this trainer already owns (`trainerId = actor.id`)
+ * and grants no access that getWorkoutPlan didn't already allow — the plan's
+ * own authorization is unchanged.
+ */
+export async function listWorkoutPlansForTrainer(actor: Actor) {
+  if (actor.role !== "TRAINER") {
+    throw new ForbiddenError("Only a trainer can view their own workout plans.");
+  }
+
+  return db.workoutPlan.findMany({
+    where: { trainerId: actor.id },
+    include: { member: { select: { id: true, fullName: true } } },
+    orderBy: [{ status: "asc" }, { startDate: "desc" }],
+  });
+}
+
 export async function addWorkoutDay(actor: Actor, planId: string, input: WorkoutDayInput) {
   const plan = await getPlanOrThrow(planId);
   await requireManageAccess(actor, plan);

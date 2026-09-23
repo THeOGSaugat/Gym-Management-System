@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { ShieldAlert } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import { logoutAction } from "@/lib/auth/actions";
 import { Button } from "@/components/ui/button";
 import { SiteHeader } from "@/components/layout/site-header";
+import { StatusScreen } from "@/components/ui/status-screen";
+import { ROLE_LABEL } from "@/components/layout/nav-config";
 
 export const metadata: Metadata = {
   title: "Access denied",
@@ -20,28 +23,40 @@ export default async function ForbiddenPage() {
   return (
     <div className="flex flex-1 flex-col">
       <SiteHeader />
-      <main className="flex flex-1 flex-col items-center justify-center gap-4 px-4 py-24 text-center sm:px-6">
-        <p className="text-sm font-medium text-muted-foreground">403</p>
-        <h1 className="text-2xl font-semibold tracking-tight">Access denied</h1>
-        <p className="max-w-md text-muted-foreground">
-          {user
-            ? `Your account (${user.role.toLowerCase()}) doesn't have permission to view that page.`
-            : "You don't have permission to view that page."}
-        </p>
-        <div className="flex gap-3">
-          {user ? (
-            <>
-              <Button nativeButton={false} render={<Link href="/dashboard">Go to my dashboard</Link>} />
-              <form action={logoutAction}>
-                <Button type="submit" variant="outline">
-                  Log out
-                </Button>
-              </form>
-            </>
-          ) : (
-            <Button nativeButton={false} render={<Link href="/login">Log in</Link>} />
-          )}
-        </div>
+      <main className="flex flex-1 flex-col">
+        <StatusScreen
+          icon={ShieldAlert}
+          tone="warning"
+          eyebrow="403 · Access denied"
+          title="This area isn't yours"
+          description={
+            user
+              ? `You're signed in as a ${ROLE_LABEL[user.role].toLowerCase()}, and that page belongs to a different role. Nothing was changed.`
+              : "You don't have permission to view that page."
+          }
+          actions={
+            user ? (
+              <>
+                <Button
+                  className="w-full sm:w-auto"
+                  nativeButton={false}
+                  render={<Link href="/dashboard">Go to my dashboard</Link>}
+                />
+                <form action={logoutAction} className="w-full sm:w-auto">
+                  <Button type="submit" variant="outline" block>
+                    Log out
+                  </Button>
+                </form>
+              </>
+            ) : (
+              <Button
+                className="w-full sm:w-auto"
+                nativeButton={false}
+                render={<Link href="/login">Log in</Link>}
+              />
+            )
+          }
+        />
       </main>
     </div>
   );

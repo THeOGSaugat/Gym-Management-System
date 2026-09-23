@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { Dumbbell } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth/session";
 import { logoutAction } from "@/lib/auth/actions";
+import { BrandMark } from "@/components/layout/brand-mark";
+import { Button } from "@/components/ui/button";
 
 /**
  * Public header shown on unauthenticated pages (landing, login, forbidden).
- * The authenticated app (admin/trainer/member) uses AppHeader instead.
+ * The authenticated app (admin/trainer/member) uses AppShell instead.
  * This is a server component so it can read the session and swap between
  * "Log in" and "Dashboard / Log out" without any client-side fetch.
  */
@@ -13,37 +14,27 @@ export async function SiteHeader() {
   const user = await getCurrentUser();
 
   return (
-    <header className="border-b">
-      <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 sm:px-6">
-        <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
-          <Dumbbell className="size-5" aria-hidden="true" />
-          <span>Gym Management System</span>
-        </Link>
-        <nav className="flex items-center gap-4 text-sm">
+    <header className="border-b border-border bg-background/85 backdrop-blur-md">
+      <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
+        <BrandMark href="/" />
+
+        <nav className="flex items-center gap-2" aria-label="Account">
           {user ? (
             <>
-              <Link
-                href="/dashboard"
-                className="text-muted-foreground transition-colors hover:text-foreground"
-              >
-                Dashboard
-              </Link>
+              <Button
+                variant="ghost"
+                size="sm"
+                nativeButton={false}
+                render={<Link href="/dashboard">Dashboard</Link>}
+              />
               <form action={logoutAction}>
-                <button
-                  type="submit"
-                  className="text-muted-foreground transition-colors hover:text-foreground"
-                >
+                <Button type="submit" variant="outline" size="sm">
                   Log out
-                </button>
+                </Button>
               </form>
             </>
           ) : (
-            <Link
-              href="/login"
-              className="text-muted-foreground transition-colors hover:text-foreground"
-            >
-              Log in
-            </Link>
+            <Button size="sm" nativeButton={false} render={<Link href="/login">Log in</Link>} />
           )}
         </nav>
       </div>

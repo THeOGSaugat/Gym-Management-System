@@ -1,59 +1,89 @@
 import Link from "next/link";
-import { Bell, Dumbbell } from "lucide-react";
-import { logoutAction } from "@/lib/auth/actions";
+import { Bell } from "lucide-react";
+import { BrandMark } from "@/components/layout/brand-mark";
+import { MobileNavDrawer } from "@/components/layout/mobile-nav-drawer";
+import { UserMenu } from "@/components/layout/user-menu";
 import { Button } from "@/components/ui/button";
+import { NAV_BY_ROLE } from "@/components/layout/nav-config";
+import type { Role } from "@/generated/prisma/client";
 
 /**
- * Header shown inside role-scoped areas (admin/trainer/member). Distinct
- * from SiteHeader, which is for public pages — this one always has a
- * signed-in user and a logout action.
+ * The top bar for every signed-in area.
+ *
+ * It deliberately does not repeat the main navigation: on desktop that lives
+ * in the sidebar, on mobile in either the bottom tab bar (member/trainer) or
+ * the drawer this header opens (admin). What it does carry is the things
+ * that must be reachable from every screen regardless of where you are —
+ * identity, notifications and account actions.
  */
 export function AppHeader({
-  name,
   role,
-  unreadNotificationCount = 0,
-  notificationsHref,
+  roleLabel,
+  userName,
+  userEmail,
+  unreadNotificationCount,
+  showMenuTrigger,
 }: {
-  name: string;
-  role: string;
-  /** Omit (or pass 0) on a page that doesn't have a signed-in actor's notification count handy — the bell just shows with no badge. */
-  unreadNotificationCount?: number;
-  /** Where the bell links — each role area has its own /notifications page under the same role-gated layout. */
-  notificationsHref: string;
+  role: Role;
+  roleLabel: string;
+  userName: string;
+  userEmail?: string;
+  unreadNotificationCount: number;
+  /** ADMIN gets a drawer trigger on mobile; roles with a bottom tab bar don't need one. */
+  showMenuTrigger: boolean;
 }) {
+  const nav = NAV_BY_ROLE[role];
+  const hasUnread = unreadNotificationCount > 0;
+
   return (
-    <header className="border-b">
-      <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 sm:px-6">
-        <div className="flex items-center gap-2 font-semibold tracking-tight">
-          <Dumbbell className="size-5" aria-hidden="true" />
-          <span>Gym Management System</span>
-        </div>
-        <div className="flex items-center gap-4">
-          <Link
-            href={notificationsHref}
-            className="relative inline-flex size-9 items-center justify-center rounded-md hover:bg-muted"
-            aria-label={
-              unreadNotificationCount > 0
-                ? `Notifications (${unreadNotificationCount} unread)`
-                : "Notifications"
-            }
-          >
-            <Bell className="size-5" aria-hidden="true" />
-            {unreadNotificationCount > 0 ? (
-              <span className="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium text-destructive-foreground">
-                {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
-              </span>
-            ) : null}
-          </Link>
-          <div className="text-right text-sm leading-tight">
-            <p className="font-medium">{name}</p>
-            <p className="text-muted-foreground capitalize">{role.toLowerCase()}</p>
+    <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur-md">
+      <div className="flex h-16 items-center gap-2 px-4 sm:px-6">
+        {showMenuTrigger ? (
+          <div className="lg:hidden">
+            <MobileNavDrawer
+              role={role}
+              roleLabel={roleLabel}
+              userName={userName}
+              unreadNotificationCount={unreadNotificationCount}
+            />
           </div>
-          <form action={logoutAction}>
-            <Button type="submit" variant="outline" size="sm">
-              Log out
-            </Button>
-          </form>
+        ) : null}
+
+        {/* The sidebar carries the lockup from `lg` up, so it only appears
+            here on the screens that have no sidebar. */}
+        <div className="min-w-0 lg:hidden">
+          <BrandMark href={nav.home} role={roleLabel} compact />
+        </div>
+
+        <div className="ml-auto flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            nativeButton={false}
+            className="relative"
+            render={
+              <Link
+                href={nav.notificationsHref}
+                aria-label={
+                  hasUnread
+                    ? `Notifications, ${unreadNotificationCount} unread`
+                    : "Notifications"
+                }
+              >
+                <Bell aria-hidden="true" className="size-5" />
+                {hasUnread ? (
+                  <span
+                    aria-hidden="true"
+                    className="absolute top-1.5 right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[0.625rem] font-semibold text-primary-foreground tabular-nums"
+                  >
+                    {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+                  </span>
+                ) : null}
+              </Link>
+            }
+          />
+
+          <UserMenu name={userName} email={userEmail} roleLabel={roleLabel} />
         </div>
       </div>
     </header>

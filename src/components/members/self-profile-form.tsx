@@ -2,9 +2,10 @@
 
 import { useActionState } from "react";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { ActionFeedback } from "@/components/ui/action-feedback";
+import { Field, FormActions, FormSection } from "@/components/ui/form-field";
 
 export type SelfProfileFormState = { error?: string; success?: boolean } | undefined;
 
@@ -28,78 +29,72 @@ export function SelfProfileForm({
 
   return (
     <form action={formAction} className="flex flex-col gap-6" noValidate>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="fullName">Full name</Label>
+      <FormSection title="Contact details">
+        <Field label="Full name" htmlFor="fullName">
           <Input
             id="fullName"
             name="fullName"
+            autoComplete="name"
             required
             disabled={pending}
             defaultValue={defaultValues.fullName}
           />
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="phone">Phone</Label>
+        </Field>
+        <Field label="Phone" htmlFor="phone" optional>
           <Input
             id="phone"
             name="phone"
             type="tel"
+            inputMode="tel"
+            autoComplete="tel"
             disabled={pending}
             defaultValue={defaultValues.phone}
           />
-        </div>
-      </div>
+        </Field>
+        <Field label="Address" htmlFor="address" optional className="sm:col-span-2">
+          <Textarea
+            id="address"
+            name="address"
+            rows={2}
+            autoComplete="street-address"
+            disabled={pending}
+            defaultValue={defaultValues.address}
+          />
+        </Field>
+      </FormSection>
 
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="address">Address</Label>
-        <Textarea
-          id="address"
-          name="address"
-          rows={2}
-          disabled={pending}
-          defaultValue={defaultValues.address}
-        />
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="emergencyContactName">Emergency contact name</Label>
+      <FormSection
+        title="Emergency contact"
+        description="Who the gym should call if something happens during a session."
+      >
+        <Field label="Name" htmlFor="emergencyContactName" optional>
           <Input
             id="emergencyContactName"
             name="emergencyContactName"
             disabled={pending}
             defaultValue={defaultValues.emergencyContactName}
           />
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="emergencyContactPhone">Emergency contact phone</Label>
+        </Field>
+        <Field label="Phone" htmlFor="emergencyContactPhone" optional>
           <Input
             id="emergencyContactPhone"
             name="emergencyContactPhone"
             type="tel"
+            inputMode="tel"
             disabled={pending}
             defaultValue={defaultValues.emergencyContactPhone}
           />
-        </div>
-      </div>
+        </Field>
+      </FormSection>
 
-      {state?.error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {state.error}
-        </p>
-      ) : null}
-      {state?.success ? (
-        <p role="status" className="text-sm text-green-600 dark:text-green-500">
-          Profile updated.
-        </p>
-      ) : null}
+      {state?.error ? <ActionFeedback tone="error">{state.error}</ActionFeedback> : null}
+      {state?.success ? <ActionFeedback>Profile updated.</ActionFeedback> : null}
 
-      <div>
-        <Button type="submit" disabled={pending}>
+      <FormActions>
+        <Button type="submit" disabled={pending} className="w-full sm:w-auto">
           {pending ? "Saving…" : "Save changes"}
         </Button>
-      </div>
+      </FormActions>
     </form>
   );
 }

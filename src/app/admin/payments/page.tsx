@@ -1,11 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { CreditCard, Search } from "lucide-react";
 import { requireRole } from "@/lib/auth/session";
 import { listPayments } from "@/server/services/payment.service";
 import { formatMinorUnits } from "@/lib/money";
-import { Input } from "@/components/ui/input";
+import { paymentMethodLabel } from "@/lib/payment-display";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
+import { ListCard } from "@/components/ui/list-card";
+import { NativeSelect } from "@/components/ui/native-select";
+import { Pagination } from "@/components/ui/pagination";
+import { StatusBadge } from "@/components/ui/status-badge";
 import {
   Table,
   TableBody,
@@ -29,13 +36,6 @@ function isPaymentStatus(value: string | undefined): value is PaymentStatus {
   return !!value && (paymentStatusValues as readonly string[]).includes(value);
 }
 
-const STATUS_VARIANT = {
-  SUCCEEDED: "default",
-  PENDING: "secondary",
-  FAILED: "destructive",
-  REFUNDED: "outline",
-} as const;
-
 export default async function PaymentsPage({
   searchParams,
 }: {
@@ -56,153 +56,158 @@ export default async function PaymentsPage({
     page,
   });
 
-  function buildHref(overrides: { page?: number }) {
+  function buildHref(nextPage: number) {
     const next = new URLSearchParams();
     if (search) next.set("q", search);
     if (method) next.set("method", method);
     if (status) next.set("status", status);
-    const p = overrides.page ?? page;
-    if (p > 1) next.set("page", String(p));
+    if (nextPage > 1) next.set("page", String(nextPage));
     const qs = next.toString();
     return qs ? `/admin/payments?${qs}` : "/admin/payments";
   }
 
+  const hasFilters = !!(search || method || status);
+
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Payments</h1>
-        <p className="text-muted-foreground">{total} payment{total === 1 ? "" : "s"}</p>
-      </div>
+      <PageHeader
+        title="Payments"
+        description={`${total} payment${total === 1 ? "" : "s"} recorded`}
+      />
 
-      <form className="flex flex-wrap items-end gap-3" method="GET">
-        <div className="flex flex-col gap-1.5">
+      <form method="GET" className="flex flex-wrap items-end gap-2">
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:max-w-xs">
           <label htmlFor="q" className="text-sm font-medium">
-            Search
+            Member
           </label>
-          <Input id="q" name="q" placeholder="Member name or email" defaultValue={search ?? ""} className="w-64" />
+          <Input id="q" name="q" placeholder="Name or email" defaultValue={search ?? ""} />
         </div>
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-1 flex-col gap-1.5 sm:w-40 sm:flex-none">
           <label htmlFor="method" className="text-sm font-medium">
             Method
           </label>
-          <select
-            id="method"
-            name="method"
-            defaultValue={method ?? ""}
-            className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-          >
-            <option value="">All</option>
-            {paymentMethodValues.map((m) => (
-              <option key={m} value={m}>
-                {m === "BANK_TRANSFER" ? "Bank transfer" : m === "CASH" ? "Cash" : "Other"}
+          <NativeSelect id="method" name="method" defaultValue={method ?? ""}>
+            <option value="">All methods</option>
+            {paymentMethodValues.map((value) => (
+              <option key={value} value={value}>
+                {paymentMethodLabel(value)}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </div>
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-1 flex-col gap-1.5 sm:w-40 sm:flex-none">
           <label htmlFor="status" className="text-sm font-medium">
             Status
           </label>
-          <select
-            id="status"
-            name="status"
-            defaultValue={status ?? ""}
-            className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
-          >
-            <option value="">All</option>
-            {paymentStatusValues.map((s) => (
-              <option key={s} value={s}>
-                {s.charAt(0) + s.slice(1).toLowerCase()}
+          <NativeSelect id="status" name="status" defaultValue={status ?? ""}>
+            <option value="">All statuses</option>
+            {paymentStatusValues.map((value) => (
+              <option key={value} value={value}>
+                {value.charAt(0) + value.slice(1).toLowerCase()}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </div>
-        <Button type="submit" variant="outline">
-          Apply
-        </Button>
-        {(search || method || status) && (
-          <Button variant="ghost" nativeButton={false} render={<Link href="/admin/payments">Clear</Link>} />
-        )}
+        <div className="flex gap-2">
+          <Button type="submit" variant="outline">
+            <Search aria-hidden="true" />
+            Apply
+          </Button>
+          {hasFilters ? (
+            <Button
+              variant="ghost"
+              nativeButton={false}
+              render={<Link href="/admin/payments">Clear</Link>}
+            />
+          ) : null}
+        </div>
       </form>
 
       {items.length === 0 ? (
-        <div className="rounded-lg border border-dashed py-16 text-center text-muted-foreground">
-          {search || method || status ? "No payments match your search." : "No payments recorded yet."}
-        </div>
+        <EmptyState
+          icon={CreditCard}
+          title={hasFilters ? "No payments match these filters" : "No payments recorded yet"}
+          description={
+            hasFilters
+              ? "Try a different member, method or status."
+              : "Payments are recorded from a member's page when they pay."
+          }
+          action={
+            hasFilters ? (
+              <Button
+                size="sm"
+                variant="outline"
+                nativeButton={false}
+                render={<Link href="/admin/payments">Clear filters</Link>}
+              />
+            ) : undefined
+          }
+        />
       ) : (
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Member</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead>Method</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((payment) => (
-                <TableRow key={payment.id}>
-                  <TableCell>
-                    <Link href={`/admin/payments/${payment.id}`} className="hover:underline">
-                      {payment.paidAt.toLocaleDateString()}
-                    </Link>
-                  </TableCell>
-                  <TableCell>
-                    <Link href={`/admin/members/${payment.memberId}`} className="hover:underline">
-                      {payment.member.fullName}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="font-medium">
-                    {formatMinorUnits(payment.amountMinor, payment.currency)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {payment.method === "BANK_TRANSFER" ? "Bank transfer" : payment.method === "CASH" ? "Cash" : "Other"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={STATUS_VARIANT[payment.status]}>{payment.status}</Badge>
-                  </TableCell>
+        <>
+          <ul className="flex flex-col gap-2 md:hidden">
+            {items.map((payment) => (
+              <li key={payment.id}>
+                <ListCard
+                  href={`/admin/payments/${payment.id}`}
+                  icon={CreditCard}
+                  title={formatMinorUnits(payment.amountMinor, payment.currency)}
+                  subtitle={payment.member.fullName}
+                  meta={`${payment.paidAt.toLocaleDateString()} · ${paymentMethodLabel(payment.method)}`}
+                  trailing={<StatusBadge kind="payment" status={payment.status} size="sm" />}
+                />
+              </li>
+            ))}
+          </ul>
+
+          <div className="hidden overflow-hidden rounded-xl border border-border bg-card shadow-xs md:block">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/40 hover:bg-muted/40">
+                  <TableHead className="px-4">Date</TableHead>
+                  <TableHead>Member</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Method</TableHead>
+                  <TableHead className="px-4">Status</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+              <TableBody>
+                {items.map((payment) => (
+                  <TableRow key={payment.id}>
+                    <TableCell className="px-4">
+                      <Link
+                        href={`/admin/payments/${payment.id}`}
+                        className="font-medium hover:text-primary hover:underline"
+                      >
+                        {payment.paidAt.toLocaleDateString()}
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <Link
+                        href={`/admin/members/${payment.memberId}`}
+                        className="text-muted-foreground hover:text-primary hover:underline"
+                      >
+                        {payment.member.fullName}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="font-medium tabular-nums">
+                      {formatMinorUnits(payment.amountMinor, payment.currency)}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {paymentMethodLabel(payment.method)}
+                    </TableCell>
+                    <TableCell className="px-4">
+                      <StatusBadge kind="payment" status={payment.status} size="sm" />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </>
       )}
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-muted-foreground">
-            Page {page} of {totalPages}
-          </p>
-          <div className="flex gap-2">
-            {page <= 1 ? (
-              <Button variant="outline" size="sm" disabled>
-                Previous
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                nativeButton={false}
-                render={<Link href={buildHref({ page: page - 1 })}>Previous</Link>}
-              />
-            )}
-            {page >= totalPages ? (
-              <Button variant="outline" size="sm" disabled>
-                Next
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                nativeButton={false}
-                render={<Link href={buildHref({ page: page + 1 })}>Next</Link>}
-              />
-            )}
-          </div>
-        </div>
-      )}
+      <Pagination page={page} totalPages={totalPages} buildHref={buildHref} />
     </div>
   );
 }

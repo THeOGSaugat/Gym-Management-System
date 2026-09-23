@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { requireRole } from "@/lib/auth/session";
 import { getAssignedMember } from "@/server/services/trainer-portal.service";
 import { handlePageError } from "@/lib/service-error";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
+import { Card, CardContent } from "@/components/ui/card";
 import { WorkoutPlanForm } from "@/components/workouts/workout-plan-form";
 import { createWorkoutPlanAction } from "../actions";
 
@@ -26,14 +27,14 @@ export default async function NewWorkoutPlanPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        New workout plan for {member.fullName}
-      </h1>
+      <PageHeader
+        backHref={`/trainer/members/${member.id}`}
+        backLabel={member.fullName}
+        title="New workout plan"
+        description={`Create a programme for ${member.fullName}. You'll add days and exercises next.`}
+      />
 
-      <Card className="max-w-xl">
-        <CardHeader>
-          <CardTitle>Plan details</CardTitle>
-        </CardHeader>
+      <Card className="max-w-2xl">
         <CardContent>
           <WorkoutPlanForm mode="create" action={boundAction} />
         </CardContent>

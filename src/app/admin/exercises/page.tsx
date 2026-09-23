@@ -1,18 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Dumbbell, Plus, Search } from "lucide-react";
 import { requireRole } from "@/lib/auth/session";
 import { listExercises } from "@/server/services/exercise.service";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { ListCard } from "@/components/ui/list-card";
+import { StatusBadge } from "@/components/ui/status-badge";
 
 export const metadata: Metadata = {
   title: "Exercise library",
@@ -31,64 +27,79 @@ export default async function ExercisesPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Exercise library</h1>
-          <p className="text-muted-foreground">
-            {exercises.length} exercise{exercises.length === 1 ? "" : "s"}
-          </p>
-        </div>
-        <Button nativeButton={false} render={<Link href="/admin/exercises/new">Add exercise</Link>} />
-      </div>
+      <PageHeader
+        title="Exercise library"
+        description={`${exercises.length} exercise${exercises.length === 1 ? "" : "s"} shared across every workout plan`}
+        actions={
+          <Button
+            nativeButton={false}
+            render={
+              <Link href="/admin/exercises/new">
+                <Plus aria-hidden="true" />
+                Add exercise
+              </Link>
+            }
+          />
+        }
+      />
 
-      <form className="flex flex-wrap items-end gap-3" method="GET">
-        <div className="flex flex-col gap-1.5">
+      <form method="GET" className="flex flex-wrap items-end gap-2">
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:max-w-xs">
           <label htmlFor="q" className="text-sm font-medium">
             Search
           </label>
-          <Input id="q" name="q" placeholder="Exercise name" defaultValue={search ?? ""} className="w-64" />
+          <Input id="q" name="q" placeholder="Exercise name" defaultValue={search ?? ""} />
         </div>
         <Button type="submit" variant="outline">
-          Apply
+          <Search aria-hidden="true" />
+          Search
         </Button>
-        {search && <Button variant="ghost" nativeButton={false} render={<Link href="/admin/exercises">Clear</Link>} />}
+        {search ? (
+          <Button
+            variant="ghost"
+            nativeButton={false}
+            render={<Link href="/admin/exercises">Clear</Link>}
+          />
+        ) : null}
       </form>
 
       {exercises.length === 0 ? (
-        <div className="rounded-lg border border-dashed py-16 text-center text-muted-foreground">
-          {search ? "No exercises match your search." : "No exercises yet."}
-        </div>
+        <EmptyState
+          icon={Dumbbell}
+          title={search ? "No exercises match your search" : "The library is empty"}
+          description={
+            search
+              ? "Try a different name, or add this exercise to the library."
+              : "Add exercises so trainers can build workout days from them."
+          }
+          action={
+            <Button
+              size="sm"
+              nativeButton={false}
+              render={<Link href="/admin/exercises/new">Add exercise</Link>}
+            />
+          }
+        />
       ) : (
-        <div className="rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Muscle group</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {exercises.map((exercise) => (
-                <TableRow key={exercise.id}>
-                  <TableCell className="font-medium">
-                    <Link href={`/admin/exercises/${exercise.id}`} className="hover:underline">
-                      {exercise.name}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {exercise.muscleGroup ?? "—"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={exercise.isActive ? "default" : "outline"}>
-                      {exercise.isActive ? "Active" : "Inactive"}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <ul className="flex flex-col gap-2">
+          {exercises.map((exercise) => (
+            <li key={exercise.id}>
+              <ListCard
+                href={`/admin/exercises/${exercise.id}`}
+                icon={Dumbbell}
+                title={exercise.name}
+                subtitle={exercise.muscleGroup ?? undefined}
+                trailing={
+                  <StatusBadge
+                    kind="exercise"
+                    status={exercise.isActive ? "ACTIVE" : "INACTIVE"}
+                    size="sm"
+                  />
+                }
+              />
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

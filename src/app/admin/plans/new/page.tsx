@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { requireRole } from "@/lib/auth/session";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
+import { Card, CardContent } from "@/components/ui/card";
 import { PlanForm } from "@/components/plans/plan-form";
 import { createPlanAction } from "../actions";
 
@@ -13,11 +14,13 @@ export default async function NewPlanPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">New plan</h1>
-      <Card className="max-w-xl">
-        <CardHeader>
-          <CardTitle>Plan details</CardTitle>
-        </CardHeader>
+      <PageHeader
+        backHref="/admin/plans"
+        backLabel="Membership plans"
+        title="New plan"
+        description="Plans define what the gym sells. Price and duration are snapshotted onto each membership when it's assigned, so changing them later won't alter existing memberships."
+      />
+      <Card className="max-w-2xl">
         <CardContent>
           <PlanForm mode="create" action={createPlanAction} />
         </CardContent>
