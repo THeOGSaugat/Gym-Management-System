@@ -2,6 +2,7 @@ import { db } from "@/server/db";
 import { canManageAssignments, canViewTrainerRoster, type Actor } from "@/lib/auth/policies";
 import { ForbiddenError, NotFoundError, ConflictError } from "@/lib/errors";
 import { createNotification } from "@/server/services/notification.service";
+import { recordAudit, withAudit } from "@/server/services/audit.service";
 
 async function requireActiveMember(memberId: string) {
   const member = await db.user.findUnique({ where: { id: memberId } });
@@ -55,7 +56,7 @@ export async function assignMemberToTrainer(
       });
     }
 
-    return tx.trainerAssignment.create({
+    const created = await tx.trainerAssignment.create({
       data: {
         memberId,
         trainerId,
@@ -63,6 +64,19 @@ export async function assignMemberToTrainer(
         assignedByUserId: actor.id,
       },
     });
+
+    await recordAudit(tx, actor, {
+      action: "TRAINER_ASSIGNED",
+      entityType: "TrainerAssignment",
+      entityId: created.id,
+      subjectUserId: memberId,
+      summary: current
+        ? `Reassigned ${member.fullName} to ${trainer.fullName}`
+        : `Assigned ${member.fullName} to ${trainer.fullName}`,
+      metadata: { trainerId, previousTrainerId: current?.trainerId ?? null },
+    });
+
+    return created;
   });
 
   // Two notifications, one per side of the relationship — each recipient
@@ -98,7 +112,7 @@ export async function removeAssignment(actor: Actor, memberId: string) {
     throw new ForbiddenError("Only admins can remove a trainer assignment.");
   }
 
-  await requireActiveMember(memberId);
+  const member = await requireActiveMember(memberId);
 
   const current = await db.trainerAssignment.findFirst({
     where: { memberId, status: "ACTIVE" },
@@ -107,10 +121,22 @@ export async function removeAssignment(actor: Actor, memberId: string) {
     throw new ConflictError("This member doesn't have an active trainer assignment.");
   }
 
-  return db.trainerAssignment.update({
-    where: { id: current.id },
-    data: { status: "ENDED", endDate: new Date() },
-  });
+  return withAudit(
+    actor,
+    (tx) =>
+      tx.trainerAssignment.update({
+        where: { id: current.id },
+        data: { status: "ENDED", endDate: new Date() },
+      }),
+    (ended) => ({
+      action: "TRAINER_ASSIGNMENT_REMOVED",
+      entityType: "TrainerAssignment",
+      entityId: ended.id,
+      subjectUserId: memberId,
+      summary: `Removed ${member.fullName}'s trainer assignment`,
+      metadata: { trainerId: ended.trainerId },
+    }),
+  );
 }
 
 /** Admin-only: a member's current assignment (if any) and full history, most recent first. */

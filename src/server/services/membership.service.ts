@@ -9,6 +9,7 @@ import {
 } from "@/lib/membership";
 import { createNotificationOnce } from "@/server/services/notification.service";
 import type { Membership } from "@/generated/prisma/client";
+import { withAudit } from "@/server/services/audit.service";
 
 // How many days out "expiring soon" starts warning a member — chosen to
 // give enough time to renew without being so early the reminder feels
@@ -153,19 +154,31 @@ export async function createMembership(
   const endDate = addDays(startDate, plan.durationDays);
   const status = computeEffectiveStatus({ status: "PENDING", startDate, endDate }, now);
 
-  return db.membership.create({
-    data: {
-      memberId,
-      planId: plan.id,
-      startDate,
-      endDate,
-      status,
-      planNameSnapshot: plan.name,
-      priceMinorSnapshot: plan.priceMinor,
-      currencySnapshot: plan.currency,
-      createdByUserId: actor.id,
-    },
-  });
+  return withAudit(
+    actor,
+    (tx) =>
+      tx.membership.create({
+        data: {
+          memberId,
+          planId: plan.id,
+          startDate,
+          endDate,
+          status,
+          planNameSnapshot: plan.name,
+          priceMinorSnapshot: plan.priceMinor,
+          currencySnapshot: plan.currency,
+          createdByUserId: actor.id,
+        },
+      }),
+    (created) => ({
+      action: "MEMBERSHIP_CREATED",
+      entityType: "Membership",
+      entityId: created.id,
+      subjectUserId: memberId,
+      summary: `Assigned ${plan.name} membership to ${member.fullName}`,
+      metadata: { planId: plan.id, priceMinor: plan.priceMinor, startDate, endDate },
+    }),
+  );
 }
 
 /**
@@ -201,19 +214,31 @@ export async function renewMembership(actor: Actor, membershipId: string) {
   const endDate = addDays(startDate, plan.durationDays);
   const status = computeEffectiveStatus({ status: "PENDING", startDate, endDate }, now);
 
-  return db.membership.create({
-    data: {
-      memberId: existing.memberId,
-      planId: plan.id,
-      startDate,
-      endDate,
-      status,
-      planNameSnapshot: plan.name,
-      priceMinorSnapshot: plan.priceMinor,
-      currencySnapshot: plan.currency,
-      createdByUserId: actor.id,
-    },
-  });
+  return withAudit(
+    actor,
+    (tx) =>
+      tx.membership.create({
+        data: {
+          memberId: existing.memberId,
+          planId: plan.id,
+          startDate,
+          endDate,
+          status,
+          planNameSnapshot: plan.name,
+          priceMinorSnapshot: plan.priceMinor,
+          currencySnapshot: plan.currency,
+          createdByUserId: actor.id,
+        },
+      }),
+    (renewed) => ({
+      action: "MEMBERSHIP_RENEWED",
+      entityType: "Membership",
+      entityId: renewed.id,
+      subjectUserId: existing.memberId,
+      summary: `Renewed ${plan.name} membership`,
+      metadata: { renewedFrom: existing.id, priceMinor: plan.priceMinor, startDate, endDate },
+    }),
+  );
 }
 
 export async function cancelMembership(actor: Actor, membershipId: string, reason?: string) {
@@ -233,10 +258,22 @@ export async function cancelMembership(actor: Actor, membershipId: string, reaso
     throw new ConflictError("Cannot cancel a membership that has already expired.");
   }
 
-  return db.membership.update({
-    where: { id: membershipId },
-    data: { status: "CANCELLED", cancelledAt: new Date(), cancelReason: reason },
-  });
+  return withAudit(
+    actor,
+    (tx) =>
+      tx.membership.update({
+        where: { id: membershipId },
+        data: { status: "CANCELLED", cancelledAt: new Date(), cancelReason: reason },
+      }),
+    (cancelled) => ({
+      action: "MEMBERSHIP_CANCELLED",
+      entityType: "Membership",
+      entityId: cancelled.id,
+      subjectUserId: cancelled.memberId,
+      summary: `Cancelled ${cancelled.planNameSnapshot} membership`,
+      metadata: { from: current.status, reason: reason ?? null },
+    }),
+  );
 }
 
 /**

@@ -14,7 +14,7 @@ import {
   updateWorkoutExercise,
   removeWorkoutExercise,
 } from "./workout.service";
-import { ForbiddenError, NotFoundError } from "@/lib/errors";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import type { Actor } from "@/lib/auth/policies";
 
 const admin: Actor = { id: "admin-1", role: "ADMIN" };
@@ -506,5 +506,109 @@ describe("updateWorkoutExercise / removeWorkoutExercise", () => {
     expect(prismaMock.workoutExercise.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ sets: 4 }) }),
     );
+  });
+});
+
+describe("Phase 10 business rules", () => {
+  const activeAssignment = {
+    id: "a1",
+    memberId: "member-1",
+    trainerId: "trainer-1",
+    status: "ACTIVE" as const,
+    startDate: new Date(),
+    endDate: null,
+    notes: null,
+    assignedByUserId: "admin-1",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  const exerciseRow = (isActive: boolean) => ({
+    id: "exercise-1",
+    name: "Bench Press",
+    muscleGroup: null,
+    description: null,
+    instructions: null,
+    isActive,
+    createdByUserId: "trainer-1",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
+  it("refuses to program an exercise that has been retired from the library", async () => {
+    prismaMock.workoutDay.findUnique.mockResolvedValue({ ...dayRow(), plan: planRow() } as never);
+    prismaMock.trainerAssignment.findFirst.mockResolvedValue(activeAssignment);
+    prismaMock.exercise.findUnique.mockResolvedValue(exerciseRow(false));
+
+    await expect(addWorkoutExercise(trainer, "day-1", validExerciseInput)).rejects.toBeInstanceOf(
+      ConflictError,
+    );
+    expect(prismaMock.workoutExercise.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses to swap an entry over to a retired exercise, but keeps existing entries editable", async () => {
+    const entry = { ...workoutExerciseRow(), workoutDay: { ...dayRow(), plan: planRow() } };
+    prismaMock.workoutExercise.findUnique.mockResolvedValue(entry as never);
+    prismaMock.trainerAssignment.findFirst.mockResolvedValue(activeAssignment);
+    prismaMock.exercise.findUnique.mockResolvedValue(exerciseRow(false));
+
+    await expect(
+      updateWorkoutExercise(trainer, "we-1", { ...validExerciseInput, exerciseId: "exercise-2" }),
+    ).rejects.toBeInstanceOf(ConflictError);
+    expect(prismaMock.workoutExercise.update).not.toHaveBeenCalled();
+
+    // Same exercise, new sets: allowed even though it's retired now.
+    prismaMock.workoutExercise.update.mockResolvedValue(workoutExerciseRow() as never);
+    await updateWorkoutExercise(trainer, "we-1", { ...validExerciseInput, sets: 5 });
+    expect(prismaMock.workoutExercise.update).toHaveBeenCalled();
+  });
+
+  it("rejects a plan whose end date is before its start date, on create and on update", async () => {
+    prismaMock.user.findUnique.mockResolvedValue(memberUser);
+    prismaMock.trainerAssignment.findFirst.mockResolvedValue(activeAssignment);
+    const backwards = {
+      ...validPlanInput,
+      startDate: new Date("2026-06-10"),
+      endDate: new Date("2026-06-01"),
+    };
+
+    await expect(createWorkoutPlan(trainer, "member-1", backwards)).rejects.toBeInstanceOf(
+      ValidationError,
+    );
+    expect(prismaMock.workoutPlan.create).not.toHaveBeenCalled();
+
+    // Update with the start left blank is checked against the *stored* start.
+    prismaMock.workoutPlan.findUnique.mockResolvedValue(
+      planRow({ startDate: new Date("2026-06-10") }),
+    );
+    await expect(
+      updateWorkoutPlan(trainer, "plan-1", { ...validPlanInput, endDate: new Date("2026-06-01") }),
+    ).rejects.toBeInstanceOf(ValidationError);
+    expect(prismaMock.workoutPlan.update).not.toHaveBeenCalled();
+  });
+
+  it("never re-activates a cancelled or completed plan, even for its assigned trainer", async () => {
+    prismaMock.trainerAssignment.findFirst.mockResolvedValue(activeAssignment);
+    for (const finalStatus of ["CANCELLED", "COMPLETED"] as const) {
+      prismaMock.workoutPlan.findUnique.mockResolvedValue(planRow({ status: finalStatus }));
+      await expect(setWorkoutPlanStatus(trainer, "plan-1", "ACTIVE")).rejects.toBeInstanceOf(
+        ConflictError,
+      );
+    }
+    expect(prismaMock.workoutPlan.update).not.toHaveBeenCalled();
+  });
+
+  it("allows only ACTIVE → COMPLETED / CANCELLED", async () => {
+    prismaMock.trainerAssignment.findFirst.mockResolvedValue(activeAssignment);
+    prismaMock.workoutPlan.findUnique.mockResolvedValue(planRow());
+    await expect(setWorkoutPlanStatus(trainer, "plan-1", "ACTIVE")).rejects.toBeInstanceOf(
+      ConflictError,
+    );
+
+    prismaMock.workoutPlan.update.mockResolvedValue(planRow({ status: "COMPLETED" }));
+    await setWorkoutPlanStatus(trainer, "plan-1", "COMPLETED");
+    expect(prismaMock.workoutPlan.update).toHaveBeenCalledWith({
+      where: { id: "plan-1" },
+      data: { status: "COMPLETED" },
+    });
   });
 });

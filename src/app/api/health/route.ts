@@ -21,12 +21,8 @@ export async function GET() {
     });
   } catch (cause) {
     console.error("Health check failed to reach the database:", cause);
-    return apiError(
-      new AppError(
-        "Database is unreachable. Check DATABASE_URL in .env.",
-        503,
-        "DATABASE_UNAVAILABLE",
-      ),
-    );
+    // Public endpoint: say *that* it failed, not how it's configured. The
+    // real cause is in the server log above.
+    return apiError(new AppError("Database is unavailable.", 503, "DATABASE_UNAVAILABLE"));
   }
 }

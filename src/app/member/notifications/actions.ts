@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
+import { parseIdArg } from "@/lib/validations/action-args";
 import {
   markNotificationAsRead,
   markAllNotificationsAsRead,
@@ -9,6 +10,7 @@ import {
 
 export async function markNotificationReadAction(notificationId: string) {
   const actor = await requireRole("MEMBER");
+  notificationId = parseIdArg(notificationId);
   await markNotificationAsRead(actor, notificationId);
   revalidatePath("/member/notifications");
 }

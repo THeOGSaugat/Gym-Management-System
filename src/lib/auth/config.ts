@@ -24,6 +24,14 @@ const AREA_ROLE: Record<string, Role> = {
   "/member": "MEMBER",
 };
 
+/** The role an area requires, or undefined for public paths (landing page, /login, ...). */
+export function requiredRoleForPath(path: string): Role | undefined {
+  const matchedPrefix = Object.keys(AREA_ROLE).find(
+    (prefix) => path === prefix || path.startsWith(`${prefix}/`),
+  );
+  return matchedPrefix ? AREA_ROLE[matchedPrefix] : undefined;
+}
+
 export const authConfig = {
   pages: {
     signIn: "/login",
@@ -39,20 +47,17 @@ export const authConfig = {
   providers: [],
   callbacks: {
     authorized({ auth, request }) {
-      const path = request.nextUrl.pathname;
-      const matchedPrefix = Object.keys(AREA_ROLE).find(
-        (prefix) => path === prefix || path.startsWith(`${prefix}/`),
-      );
+      const requiredRole = requiredRoleForPath(request.nextUrl.pathname);
 
       // Not a role-restricted area (landing page, /login, /api/health, ...).
-      if (!matchedPrefix) return true;
+      if (!requiredRole) return true;
 
       const user = auth?.user;
       // Not signed in: Auth.js redirects to `pages.signIn` automatically.
       if (!user) return false;
 
       // Signed in but wrong role for this area.
-      if (user.role !== AREA_ROLE[matchedPrefix]) {
+      if (user.role !== requiredRole) {
         return Response.redirect(new URL("/forbidden", request.nextUrl));
       }
 

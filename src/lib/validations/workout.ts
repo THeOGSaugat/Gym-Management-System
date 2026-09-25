@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isBlank, optionalDate, optionalTrimmedString } from "./shared";
+import { isBlank, optionalDate, optionalTrimmedString, requiredIdField } from "./shared";
 
 export const workoutPlanSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(150, "Name is too long"),
@@ -20,7 +20,7 @@ export const workoutDaySchema = z.object({
 export type WorkoutDayInput = z.infer<typeof workoutDaySchema>;
 
 export const workoutExerciseSchema = z.object({
-  exerciseId: z.string().trim().min(1, "Choose an exercise"),
+  exerciseId: requiredIdField("Choose an exercise"),
   sets: z.coerce.number().int("Sets must be a whole number").min(1, "At least 1 set").max(50, "That's an unrealistic number of sets"),
   reps: z.coerce.number().int("Reps must be a whole number").min(1, "At least 1 rep").max(200, "That's an unrealistic number of reps"),
   weightKg: z.preprocess(

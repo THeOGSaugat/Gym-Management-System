@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
+import { parseIdArg } from "@/lib/validations/action-args";
 import { createWorkoutPlan } from "@/server/services/workout.service";
 import { workoutPlanSchema } from "@/lib/validations/workout";
 import { AppError } from "@/lib/errors";
@@ -13,6 +14,7 @@ export async function createWorkoutPlanAction(
   formData: FormData,
 ): Promise<WorkoutPlanFormState> {
   const actor = await requireRole("TRAINER");
+  memberId = parseIdArg(memberId);
 
   const parsed = workoutPlanSchema.safeParse({
     name: formData.get("name"),

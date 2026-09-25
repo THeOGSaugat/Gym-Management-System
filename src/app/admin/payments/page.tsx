@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import { paymentMethodValues, paymentStatusValues } from "@/lib/validations/payment";
 import type { PaymentMethod, PaymentStatus } from "@/generated/prisma/client";
+import { parsePageParam } from "@/lib/pagination";
 
 export const metadata: Metadata = {
   title: "Payments",
@@ -47,7 +48,7 @@ export default async function PaymentsPage({
   const search = params.q?.trim() || undefined;
   const method = isPaymentMethod(params.method) ? params.method : undefined;
   const status = isPaymentStatus(params.status) ? params.status : undefined;
-  const page = Math.max(1, Number(params.page) || 1);
+  const page = parsePageParam(params.page);
 
   const { items, total, totalPages } = await listPayments(actor, {
     search,

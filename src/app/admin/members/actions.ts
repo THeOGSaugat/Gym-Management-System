@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
+import { parseEnumArg, parseIdArg } from "@/lib/validations/action-args";
 import {
   createMember,
   updateMemberAsAdmin,
@@ -60,6 +61,7 @@ export async function updateMemberAction(
   formData: FormData,
 ): Promise<MemberFormState> {
   const actor = await requireRole("ADMIN");
+  memberId = parseIdArg(memberId);
 
   const parsed = adminUpdateMemberSchema.safeParse(readMemberFormFields(formData));
 
@@ -81,6 +83,8 @@ export async function updateMemberAction(
 
 export async function setMemberStatusAction(memberId: string, nextStatus: "ACTIVE" | "SUSPENDED") {
   const actor = await requireRole("ADMIN");
+  memberId = parseIdArg(memberId);
+  nextStatus = parseEnumArg(nextStatus, ["ACTIVE", "SUSPENDED"]);
 
   await setMemberStatus(actor, memberId, nextStatus);
 

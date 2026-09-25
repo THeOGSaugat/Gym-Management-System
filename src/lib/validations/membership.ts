@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { optionalDate, optionalTrimmedString } from "./shared";
+import { optionalDate, optionalTrimmedString, requiredIdField } from "./shared";
 
 /**
  * Deliberately has no price/amount field at all — a membership's price is
@@ -8,7 +8,7 @@ import { optionalDate, optionalTrimmedString } from "./shared";
  * submission to override, because the field doesn't exist on this schema.
  */
 export const assignMembershipSchema = z.object({
-  planId: z.string().trim().min(1, "Choose a plan"),
+  planId: requiredIdField("Choose a plan"),
   // Defaults to today in the service if omitted — lets an admin schedule
   // a membership to start later (status starts PENDING) or backdate one
   // being entered after the fact.

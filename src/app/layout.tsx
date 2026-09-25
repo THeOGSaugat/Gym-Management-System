@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import "./globals.css";
 import { BRAND } from "@/lib/brand";
 
@@ -10,7 +11,14 @@ export const metadata: Metadata = {
   description: BRAND.description,
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // Every page must render per request: the Content-Security-Policy nonce
+  // (see src/proxy.ts) is unique per request, and a statically pre-rendered
+  // page would ship scripts without it — which the browser would then
+  // refuse to run. All routes are dynamic today anyway (they read the
+  // session); this guarantees a future static page can't silently break.
+  await connection();
+
   return (
     <html
       lang="en"

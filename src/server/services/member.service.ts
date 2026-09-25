@@ -9,6 +9,8 @@ import type {
   AdminUpdateMemberInput,
   SelfUpdateMemberInput,
 } from "@/lib/validations/member";
+import { clampPage } from "@/lib/pagination";
+import { withAudit } from "@/server/services/audit.service";
 
 const MEMBERS_PER_PAGE = 20;
 
@@ -37,7 +39,7 @@ export async function listMembers(actor: Actor, params: ListMembersParams = {}) 
     throw new ForbiddenError("Only admins can view the member list.");
   }
 
-  const page = Math.max(1, params.page ?? 1);
+  const page = clampPage(params.page);
   const search = params.search?.trim();
 
   const where = {
@@ -103,25 +105,36 @@ export async function createMember(actor: Actor, input: CreateMemberInput) {
   const passwordHash = await hashPassword(input.password);
 
   try {
-    return await db.user.create({
-      data: {
-        email: input.email,
-        passwordHash,
-        fullName: input.fullName,
-        phone: input.phone,
-        role: MEMBER_ROLE,
-        status: "ACTIVE",
-        memberProfile: {
-          create: {
-            dateOfBirth: input.dateOfBirth,
-            address: input.address,
-            emergencyContactName: input.emergencyContactName,
-            emergencyContactPhone: input.emergencyContactPhone,
+    return await withAudit(
+      actor,
+      (tx) =>
+        tx.user.create({
+          data: {
+            email: input.email,
+            passwordHash,
+            fullName: input.fullName,
+            phone: input.phone,
+            role: MEMBER_ROLE,
+            status: "ACTIVE",
+            memberProfile: {
+              create: {
+                dateOfBirth: input.dateOfBirth,
+                address: input.address,
+                emergencyContactName: input.emergencyContactName,
+                emergencyContactPhone: input.emergencyContactPhone,
+              },
+            },
           },
-        },
-      },
-      include: { memberProfile: true },
-    });
+          include: { memberProfile: true },
+        }),
+      (created) => ({
+        action: "MEMBER_CREATED",
+        entityType: "User",
+        entityId: created.id,
+        subjectUserId: created.id,
+        summary: `Created member ${created.fullName}`,
+      }),
+    );
   } catch (error) {
     // Defense-in-depth against a race between the pre-check above and
     // this insert — see isUniqueConstraintError's own comment.
@@ -154,31 +167,43 @@ export async function updateMemberAsAdmin(
   }
 
   try {
-    return await db.user.update({
-      where: { id: userId },
-      data: {
-        fullName: input.fullName,
-        email: input.email,
-        phone: input.phone,
-        memberProfile: {
-          upsert: {
-            create: {
-              dateOfBirth: input.dateOfBirth,
-              address: input.address,
-              emergencyContactName: input.emergencyContactName,
-              emergencyContactPhone: input.emergencyContactPhone,
-            },
-            update: {
-              dateOfBirth: input.dateOfBirth,
-              address: input.address,
-              emergencyContactName: input.emergencyContactName,
-              emergencyContactPhone: input.emergencyContactPhone,
+    return await withAudit(
+      actor,
+      (tx) =>
+        tx.user.update({
+          where: { id: userId },
+          data: {
+            fullName: input.fullName,
+            email: input.email,
+            phone: input.phone,
+            memberProfile: {
+              upsert: {
+                create: {
+                  dateOfBirth: input.dateOfBirth,
+                  address: input.address,
+                  emergencyContactName: input.emergencyContactName,
+                  emergencyContactPhone: input.emergencyContactPhone,
+                },
+                update: {
+                  dateOfBirth: input.dateOfBirth,
+                  address: input.address,
+                  emergencyContactName: input.emergencyContactName,
+                  emergencyContactPhone: input.emergencyContactPhone,
+                },
+              },
             },
           },
-        },
-      },
-      include: { memberProfile: true },
-    });
+          include: { memberProfile: true },
+        }),
+      (updated) => ({
+        action: "MEMBER_UPDATED",
+        entityType: "User",
+        entityId: updated.id,
+        subjectUserId: updated.id,
+        summary: `Updated member ${updated.fullName}`,
+        metadata: existingMember.email !== updated.email ? { emailChanged: true } : undefined,
+      }),
+    );
   } catch (error) {
     if (isUniqueConstraintError(error, "email")) {
       throw new ConflictError("An account with this email already exists.");
@@ -238,9 +263,21 @@ export async function setMemberStatus(actor: Actor, userId: string, status: User
     throw new NotFoundError("Member not found.");
   }
 
-  return db.user.update({
-    where: { id: userId },
-    data: { status },
-    include: { memberProfile: true },
-  });
+  return withAudit(
+    actor,
+    (tx) =>
+      tx.user.update({
+        where: { id: userId },
+        data: { status },
+        include: { memberProfile: true },
+      }),
+    (updated) => ({
+      action: "MEMBER_STATUS_CHANGED",
+      entityType: "User",
+      entityId: updated.id,
+      subjectUserId: updated.id,
+      summary: `${status === "SUSPENDED" ? "Suspended" : "Reactivated"} member ${updated.fullName}`,
+      metadata: { from: member.status, to: status },
+    }),
+  );
 }

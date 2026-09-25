@@ -4,9 +4,10 @@ import {
   canViewWorkoutPlanFor,
   type Actor,
 } from "@/lib/auth/policies";
-import { ForbiddenError, NotFoundError } from "@/lib/errors";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "@/lib/errors";
 import { isMemberAssignedToTrainer } from "@/server/services/assignment.service";
 import { createNotification } from "@/server/services/notification.service";
+import { withAudit } from "@/server/services/audit.service";
 import type {
   WorkoutPlanInput,
   WorkoutDayInput,
@@ -43,6 +44,42 @@ async function requireManageAccess(actor: Actor, plan: { memberId: string }) {
     throw new ForbiddenError("You don't have permission to manage this workout plan.");
   }
 }
+
+/**
+ * A plan can't end before it starts. Checked against the *resolved* start
+ * date (today on create, the stored date on update when the form leaves it
+ * blank), which the schema alone can't see.
+ */
+function assertValidPlanDates(startDate: Date, endDate: Date | undefined | null) {
+  if (endDate && endDate.getTime() < startDate.getTime()) {
+    throw new ValidationError("The end date can't be before the start date.");
+  }
+}
+
+/**
+ * An exercise an admin has retired from the library can't be newly
+ * programmed. Entries already in existing plans keep pointing at it — the
+ * member's history stays intact — but nobody can add it again.
+ */
+async function getProgrammableExerciseOrThrow(exerciseId: string) {
+  const exercise = await db.exercise.findUnique({ where: { id: exerciseId } });
+  if (!exercise) throw new NotFoundError("Exercise not found.");
+  if (!exercise.isActive) {
+    throw new ConflictError("This exercise has been retired from the library and can't be added.");
+  }
+  return exercise;
+}
+
+/**
+ * Plans only ever move forward: an ACTIVE plan can be completed or
+ * cancelled, and both are final (the trainer UI says a cancelled plan
+ * can't be re-activated — this is what makes that true server-side).
+ */
+const ALLOWED_STATUS_CHANGES: Record<WorkoutPlanStatus, readonly WorkoutPlanStatus[]> = {
+  ACTIVE: ["COMPLETED", "CANCELLED"],
+  COMPLETED: [],
+  CANCELLED: [],
+};
 
 async function getPlanOrThrow(planId: string) {
   const plan = await db.workoutPlan.findUnique({ where: { id: planId } });
@@ -93,13 +130,16 @@ export async function createWorkoutPlan(actor: Actor, memberId: string, input: W
     throw new ForbiddenError("You can only create workout plans for members assigned to you.");
   }
 
+  const startDate = input.startDate ?? new Date();
+  assertValidPlanDates(startDate, input.endDate);
+
   const plan = await db.workoutPlan.create({
     data: {
       memberId,
       trainerId: actor.id,
       name: input.name,
       description: input.description,
-      startDate: input.startDate ?? new Date(),
+      startDate,
       endDate: input.endDate,
     },
   });
@@ -127,12 +167,15 @@ export async function updateWorkoutPlan(actor: Actor, id: string, input: Workout
   const plan = await getPlanOrThrow(id);
   await requireManageAccess(actor, plan);
 
+  const startDate = input.startDate ?? plan.startDate;
+  assertValidPlanDates(startDate, input.endDate);
+
   return db.workoutPlan.update({
     where: { id },
     data: {
       name: input.name,
       description: input.description,
-      startDate: input.startDate ?? plan.startDate,
+      startDate,
       endDate: input.endDate,
     },
   });
@@ -142,7 +185,26 @@ export async function setWorkoutPlanStatus(actor: Actor, id: string, status: Wor
   const plan = await getPlanOrThrow(id);
   await requireManageAccess(actor, plan);
 
-  return db.workoutPlan.update({ where: { id }, data: { status } });
+  if (!ALLOWED_STATUS_CHANGES[plan.status].includes(status)) {
+    throw new ConflictError(
+      plan.status === "ACTIVE"
+        ? "That isn't a valid status change for this plan."
+        : `This plan is already ${plan.status.toLowerCase()} and can't be changed.`,
+    );
+  }
+
+  return withAudit(
+    actor,
+    (tx) => tx.workoutPlan.update({ where: { id }, data: { status } }),
+    (updated) => ({
+      action: "WORKOUT_PLAN_STATUS_CHANGED",
+      entityType: "WorkoutPlan",
+      entityId: updated.id,
+      subjectUserId: updated.memberId,
+      summary: `${status === "CANCELLED" ? "Cancelled" : "Completed"} workout plan ${updated.name}`,
+      metadata: { from: plan.status, to: status },
+    }),
+  );
 }
 
 export async function listWorkoutPlansForMember(actor: Actor, memberId: string) {
@@ -225,8 +287,7 @@ export async function addWorkoutExercise(
   const day = await getDayWithPlanOrThrow(workoutDayId);
   await requireManageAccess(actor, day.plan);
 
-  const exercise = await db.exercise.findUnique({ where: { id: input.exerciseId } });
-  if (!exercise) throw new NotFoundError("Exercise not found.");
+  await getProgrammableExerciseOrThrow(input.exerciseId);
 
   const lastExercise = await db.workoutExercise.findFirst({
     where: { workoutDayId },
@@ -256,9 +317,10 @@ export async function updateWorkoutExercise(
   const workoutExercise = await getWorkoutExerciseWithPlanOrThrow(workoutExerciseId);
   await requireManageAccess(actor, workoutExercise.workoutDay.plan);
 
+  // Only a *swap* is checked: editing sets/reps on an entry whose exercise
+  // was retired later is still allowed, so existing plans stay editable.
   if (input.exerciseId !== workoutExercise.exerciseId) {
-    const exercise = await db.exercise.findUnique({ where: { id: input.exerciseId } });
-    if (!exercise) throw new NotFoundError("Exercise not found.");
+    await getProgrammableExerciseOrThrow(input.exerciseId);
   }
 
   return db.workoutExercise.update({

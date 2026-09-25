@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { CheckInPanel } from "@/components/attendance/check-in-panel";
 import { checkInAction, checkOutAction } from "./actions";
+import { parsePageParam } from "@/lib/pagination";
 
 export const metadata: Metadata = {
   title: "Attendance",
@@ -25,7 +26,7 @@ export default async function MyAttendancePage({
 }) {
   const actor = await requireRole("MEMBER");
   const { page: pageParam } = await searchParams;
-  const page = Math.max(1, Number(pageParam) || 1);
+  const page = parsePageParam(pageParam);
 
   const [{ openSession, todaysRecords }, history] = await Promise.all([
     getTodayStatus(actor, actor.id),

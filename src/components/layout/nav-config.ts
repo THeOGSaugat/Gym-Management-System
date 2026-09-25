@@ -4,6 +4,7 @@ import {
   ClipboardList,
   CreditCard,
   Dumbbell,
+  History,
   House,
   LayoutDashboard,
   ScrollText,
@@ -86,6 +87,7 @@ export const NAV_BY_ROLE: Record<Role, RoleNav> = {
         items: [
           { label: "Attendance", href: "/admin/attendance", icon: CalendarCheck },
           { label: "Exercise library", href: "/admin/exercises", icon: Dumbbell },
+          { label: "Audit log", href: "/admin/audit-log", icon: History },
         ],
       },
     ],

@@ -5,6 +5,8 @@ import { ForbiddenError, NotFoundError, ConflictError } from "@/lib/errors";
 import { isUniqueConstraintError } from "@/server/prisma-errors";
 import type { UserStatus } from "@/generated/prisma/client";
 import type { CreateTrainerInput, UpdateTrainerInput } from "@/lib/validations/trainer";
+import { clampPage } from "@/lib/pagination";
+import { recordAudit, withAudit } from "@/server/services/audit.service";
 
 const TRAINERS_PER_PAGE = 20;
 
@@ -23,7 +25,7 @@ export async function listTrainers(actor: Actor, params: ListTrainersParams = {}
     throw new ForbiddenError("Only admins can view the trainer list.");
   }
 
-  const page = Math.max(1, params.page ?? 1);
+  const page = clampPage(params.page);
   const search = params.search?.trim();
 
   const where = {
@@ -89,24 +91,35 @@ export async function createTrainer(actor: Actor, input: CreateTrainerInput) {
   const passwordHash = await hashPassword(input.password);
 
   try {
-    return await db.user.create({
-      data: {
-        email: input.email,
-        passwordHash,
-        fullName: input.fullName,
-        phone: input.phone,
-        role: TRAINER_ROLE,
-        status: "ACTIVE",
-        trainerProfile: {
-          create: {
-            bio: input.bio,
-            specialization: input.specialization,
-            experienceYears: input.experienceYears,
+    return await withAudit(
+      actor,
+      (tx) =>
+        tx.user.create({
+          data: {
+            email: input.email,
+            passwordHash,
+            fullName: input.fullName,
+            phone: input.phone,
+            role: TRAINER_ROLE,
+            status: "ACTIVE",
+            trainerProfile: {
+              create: {
+                bio: input.bio,
+                specialization: input.specialization,
+                experienceYears: input.experienceYears,
+              },
+            },
           },
-        },
-      },
-      include: { trainerProfile: true },
-    });
+          include: { trainerProfile: true },
+        }),
+      (created) => ({
+        action: "TRAINER_CREATED",
+        entityType: "User",
+        entityId: created.id,
+        subjectUserId: created.id,
+        summary: `Created trainer ${created.fullName}`,
+      }),
+    );
   } catch (error) {
     if (isUniqueConstraintError(error, "email")) {
       throw new ConflictError("An account with this email already exists.");
@@ -133,29 +146,41 @@ export async function updateTrainer(actor: Actor, userId: string, input: UpdateT
   }
 
   try {
-    return await db.user.update({
-      where: { id: userId },
-      data: {
-        fullName: input.fullName,
-        email: input.email,
-        phone: input.phone,
-        trainerProfile: {
-          upsert: {
-            create: {
-              bio: input.bio,
-              specialization: input.specialization,
-              experienceYears: input.experienceYears,
-            },
-            update: {
-              bio: input.bio,
-              specialization: input.specialization,
-              experienceYears: input.experienceYears,
+    return await withAudit(
+      actor,
+      (tx) =>
+        tx.user.update({
+          where: { id: userId },
+          data: {
+            fullName: input.fullName,
+            email: input.email,
+            phone: input.phone,
+            trainerProfile: {
+              upsert: {
+                create: {
+                  bio: input.bio,
+                  specialization: input.specialization,
+                  experienceYears: input.experienceYears,
+                },
+                update: {
+                  bio: input.bio,
+                  specialization: input.specialization,
+                  experienceYears: input.experienceYears,
+                },
+              },
             },
           },
-        },
-      },
-      include: { trainerProfile: true },
-    });
+          include: { trainerProfile: true },
+        }),
+      (updated) => ({
+        action: "TRAINER_UPDATED",
+        entityType: "User",
+        entityId: updated.id,
+        subjectUserId: updated.id,
+        summary: `Updated trainer ${updated.fullName}`,
+        metadata: existingTrainer.email !== updated.email ? { emailChanged: true } : undefined,
+      }),
+    );
   } catch (error) {
     if (isUniqueConstraintError(error, "email")) {
       throw new ConflictError("An account with this email already exists.");
@@ -189,12 +214,23 @@ export async function setTrainerStatus(actor: Actor, userId: string, status: Use
       include: { trainerProfile: true },
     });
 
+    let assignmentsEnded = 0;
     if (status === "SUSPENDED") {
-      await tx.trainerAssignment.updateMany({
+      const ended = await tx.trainerAssignment.updateMany({
         where: { trainerId: userId, status: "ACTIVE" },
         data: { status: "ENDED", endDate: new Date() },
       });
+      assignmentsEnded = ended?.count ?? 0;
     }
+
+    await recordAudit(tx, actor, {
+      action: "TRAINER_STATUS_CHANGED",
+      entityType: "User",
+      entityId: updated.id,
+      subjectUserId: updated.id,
+      summary: `${status === "SUSPENDED" ? "Suspended" : "Reactivated"} trainer ${updated.fullName}`,
+      metadata: { from: trainer.status, to: status, assignmentsEnded },
+    });
 
     return updated;
   });

@@ -7,6 +7,7 @@ import {
 } from "@/lib/auth/policies";
 import { ForbiddenError, NotFoundError } from "@/lib/errors";
 import type { ExerciseInput } from "@/lib/validations/exercise";
+import { withAudit } from "@/server/services/audit.service";
 
 export type ListExercisesParams = {
   search?: string;
@@ -63,15 +64,25 @@ export async function updateExercise(actor: Actor, id: string, input: ExerciseIn
     throw new ForbiddenError("You can only edit exercises you created.");
   }
 
-  return db.exercise.update({
-    where: { id },
-    data: {
-      name: input.name,
-      muscleGroup: input.muscleGroup,
-      description: input.description,
-      instructions: input.instructions,
-    },
-  });
+  return withAudit(
+    actor,
+    (tx) =>
+      tx.exercise.update({
+        where: { id },
+        data: {
+          name: input.name,
+          muscleGroup: input.muscleGroup,
+          description: input.description,
+          instructions: input.instructions,
+        },
+      }),
+    (updated) => ({
+      action: "EXERCISE_UPDATED",
+      entityType: "Exercise",
+      entityId: updated.id,
+      summary: `Updated exercise ${updated.name}`,
+    }),
+  );
 }
 
 export async function setExerciseActive(actor: Actor, id: string, isActive: boolean) {
@@ -82,5 +93,15 @@ export async function setExerciseActive(actor: Actor, id: string, isActive: bool
     throw new ForbiddenError("You can only deactivate exercises you created.");
   }
 
-  return db.exercise.update({ where: { id }, data: { isActive } });
+  return withAudit(
+    actor,
+    (tx) => tx.exercise.update({ where: { id }, data: { isActive } }),
+    (updated) => ({
+      action: "EXERCISE_STATUS_CHANGED",
+      entityType: "Exercise",
+      entityId: updated.id,
+      summary: `${isActive ? "Restored" : "Retired"} exercise ${updated.name}`,
+      metadata: { from: existing.isActive, to: isActive },
+    }),
+  );
 }

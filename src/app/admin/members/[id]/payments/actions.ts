@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
+import { parseIdArg } from "@/lib/validations/action-args";
 import { recordPayment } from "@/server/services/payment.service";
 import { recordPaymentSchema } from "@/lib/validations/payment";
 import { AppError } from "@/lib/errors";
@@ -15,6 +16,7 @@ export async function recordPaymentAction(
   formData: FormData,
 ): Promise<RecordPaymentState> {
   const actor = await requireRole("ADMIN");
+  memberId = parseIdArg(memberId);
 
   const parsed = recordPaymentSchema.safeParse({
     membershipId: formData.get("membershipId"),

@@ -16,6 +16,12 @@ export const db =
   globalForPrisma.prisma ??
   new PrismaClient({
     adapter,
+    // Password hashes are left out of every User query unless one asks for
+    // the column explicitly — which only the login check does (see
+    // lib/auth/credentials.ts). Pages today pick the fields they render,
+    // but this makes "a hash can't reach a component" structural rather
+    // than something each new query has to remember.
+    omit: { user: { passwordHash: true } },
     log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
   });
 

@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
+import { parseIdArg } from "@/lib/validations/action-args";
 import {
   createMembership,
   renewMembership,
@@ -19,6 +20,7 @@ export async function assignMembershipAction(
   formData: FormData,
 ): Promise<AssignMembershipState> {
   const actor = await requireRole("ADMIN");
+  memberId = parseIdArg(memberId);
 
   const parsed = assignMembershipSchema.safeParse({
     planId: formData.get("planId"),
@@ -43,6 +45,8 @@ export async function assignMembershipAction(
 
 export async function renewMembershipAction(memberId: string, membershipId: string) {
   const actor = await requireRole("ADMIN");
+  memberId = parseIdArg(memberId);
+  membershipId = parseIdArg(membershipId);
   const renewed = await renewMembership(actor, membershipId);
   revalidatePath(`/admin/members/${memberId}`);
   revalidatePath(`/admin/members/${memberId}/memberships/${membershipId}`);
@@ -62,6 +66,8 @@ export async function cancelMembershipAction(
   formData: FormData,
 ) {
   const actor = await requireRole("ADMIN");
+  memberId = parseIdArg(memberId);
+  membershipId = parseIdArg(membershipId);
   const membershipHref = `/admin/members/${memberId}/memberships/${membershipId}`;
 
   const parsed = cancelMembershipSchema.safeParse({ reason: formData.get("reason") });

@@ -62,6 +62,19 @@ This repository is being built in phases.
   each notification's linked page. Strictly self-access only — not even
   an admin can read another user's notifications. See "How notifications
   work" below.
+- **Phase 10 (security, authorization & testing)** — done: a full audit
+  of auth, RBAC, ownership, Server Actions, validation and exposure.
+  Sessions are now confirmed against the database on every request (a
+  suspended account is locked out immediately, not after its 8-hour JWT
+  expires); every Server Action validates its bound arguments; login is
+  timing-safe with per-account and per-client rate limits; password
+  hashes are excluded from every query by default; workout-plan status
+  and date rules and "no retired exercises" are enforced server-side;
+  pagination can no longer be crashed by a crafted `?page=`; baseline
+  security headers are set. A follow-up added an append-only audit log
+  (enforced by database triggers), database-backed rate limiting shared
+  across instances, proxy-aware client IPs, and a nonce-based
+  Content-Security-Policy. See "How security works" below.
 
 ## Stack
 
@@ -541,13 +554,16 @@ build, and fails loudly on type errors since TypeScript strict mode is on.
 
 - **Login** is a Credentials-based Auth.js v5 flow: a server action
   (`src/app/login/actions.ts`) validates input with Zod, calls
-  `signIn("credentials", ...)`, which runs `authorize()` in
-  `src/lib/auth/auth.ts` — looks up the user, checks `status === "ACTIVE"`,
-  verifies the password with bcrypt (cost factor 12). Passwords are never
-  stored or logged in plain text.
+  `signIn("credentials", ...)`, which runs `authorize()` →
+  `verifyCredentials()` in `src/lib/auth/credentials.ts` — rate limits,
+  looks up the user, checks `status === "ACTIVE"`, verifies the password
+  with bcrypt (cost factor 12). Passwords are never stored or logged in
+  plain text.
 - **Sessions** are JWTs in an httpOnly cookie (`session: { strategy: "jwt" }`),
   valid 8 hours, rolling forward on activity. The JWT carries `id` and
-  `role`, set once at login in the `jwt` callback.
+  `role`, set once at login in the `jwt` callback — but the token alone
+  is never trusted: `getCurrentUser()` re-reads the account on every
+  request (see "How security works").
 - **Authorization is enforced server-side in two layers**, not by hiding UI:
   1. **`src/proxy.ts`** (Next.js's middleware-equivalent, renamed to
      "Proxy" in Next.js 16) — a fast, database-free check: decodes the JWT
@@ -564,6 +580,92 @@ build, and fails loudly on type errors since TypeScript strict mode is on.
   (`src/lib/auth/auth.ts` — adds the Credentials provider, which touches
   Prisma and bcrypt and cannot run outside Node). This is Auth.js's own
   documented pattern for database-backed credentials + middleware/proxy.
+
+## How security works
+
+Phase 10 audited every layer; this is what holds the app together.
+
+- **Identity always comes from the server.** Every Server Action starts
+  with `requireRole()`, and every service takes that session `actor` —
+  no action or service accepts a user id, role or "acting as" value from
+  the client. Forged form fields (`memberId`, `role`, `status`, `email`
+  on a self-service form) are simply never read.
+- **Sessions are confirmed against the database.** `getCurrentUser()`
+  (`src/lib/auth/session.ts`) looks the account up on each request
+  (memoized per request with React `cache()`) and treats the session as
+  signed out if the account is gone, not ACTIVE, or no longer has the
+  role in its token. Suspending someone takes effect on their next
+  click. The proxy still does its fast JWT-only role check first; the
+  layouts, actions and services are the real boundary.
+- **Ownership lives in the service layer**, via the pure functions in
+  `lib/auth/policies.ts`. Changing an id in a URL or form gets you
+  `/forbidden` (pages) or a `ForbiddenError` (actions) — a member can't
+  read another member's plans, payments, attendance, progress or
+  notifications; a trainer can't touch members or plans that aren't
+  assigned to them. Workout days and exercise entries are authorized
+  through their parent plan, never on their own id.
+- **Bound Server Action arguments are validated.** Values bound in a page
+  (`action.bind(null, member.id, "SUSPENDED")`) are posted back by the
+  browser and can be replaced with anything — including objects Prisma
+  would read as filters. `lib/validations/action-args.ts` checks every
+  one (ids, enum values, booleans) before any query runs.
+- **Validation** is Zod throughout. Shared rules in
+  `lib/validations/shared.ts`: strict ids, dates bounded to 1990–2100,
+  "can't be in the future" for payments and progress logs, emails capped
+  at 254 characters, and new passwords capped at bcrypt's 72-byte limit
+  (longer ones would be silently truncated). Money is integer minor
+  units, positive and bounded.
+- **Business rules enforced server-side:** a workout plan can't end
+  before it starts; plans only move ACTIVE → COMPLETED/CANCELLED and
+  never back; a retired exercise can't be newly programmed; payments are
+  append-only (no update/delete path exists); attendance and progress are
+  always recorded for the session's own member.
+- **Login hardening** (`lib/auth/credentials.ts`): 5 attempts per email
+  and 30 per client per 15 minutes; one identical failure for every
+  reason; unknown/suspended accounts still run a bcrypt comparison so
+  response time doesn't reveal which emails exist.
+- **Rate limits are shared across instances.** Counters live in Postgres
+  (`rate_limit_buckets`), updated by one atomic upsert per attempt
+  (`lib/rate-limit.ts`) — correct under concurrency and on multi-instance
+  or serverless hosting, with no Redis. Expired rows are swept in the
+  background.
+- **Client IPs are only trusted from your own proxy.** The per-client
+  limit reads the `X-Forwarded-For` entry written by the outermost proxy
+  you control (`TRUSTED_PROXY_HOPS`, default 1 — see `.env.example`), so
+  addresses a client prepends are ignored. Set it to 0 if nothing sits in
+  front of the app.
+- **Audit log.** Administrative actions — creating/editing/suspending
+  members and trainers, plan changes, assigning/renewing/cancelling
+  memberships, recording payments, trainer assignments, exercise
+  retire/restore, workout-plan completion/cancellation — each write an
+  `AuditLog` row (`server/services/audit.service.ts`) **in the same
+  transaction** as the change, so neither can exist without the other.
+  The actor is always the session user. Admins read it at
+  `/admin/audit-log` (filter by action; click an entry to see everything
+  about that person). Nobody can edit or delete an entry: no code path
+  exists, and database triggers reject `UPDATE`, `DELETE` and `TRUNCATE`
+  on the table.
+- **Sensitive data:** the Prisma client omits `passwordHash` from every
+  User query by default (`src/server/db.ts`) — only the login check asks
+  for it. Error boundaries show a generic message and an opaque digest,
+  never an error message or stack; the public `/api/health` endpoint no
+  longer names configuration.
+- **Content-Security-Policy with per-request nonces.** `src/proxy.ts`
+  generates a random nonce for every request and sends a strict policy
+  (`lib/security/csp.ts`): only scripts carrying that nonce may run, so an
+  injected `<script>` is refused by the browser. Next.js stamps the nonce
+  on its own scripts automatically; the root layout calls `connection()`
+  so every page renders per request (a pre-rendered page couldn't carry
+  a fresh nonce). Styles allow `'unsafe-inline'` because `next/image`
+  uses `style` attributes, which nonces can't cover.
+- **Other headers** (`next.config.ts`): `X-Frame-Options`, `nosniff`, a
+  strict referrer policy, a restrictive `Permissions-Policy`, HSTS, and
+  no `X-Powered-By`.
+- **Tests:** `src/app/actions.security.test.ts` calls the real Server
+  Actions the way a crafted request would (wrong role, suspended account,
+  tampered arguments, someone else's ids, forged form fields) and asserts
+  the server refuses with no database write. `session.test.ts` and
+  `credentials.test.ts` cover sessions and login.
 
 ## How member management works
 
@@ -1150,6 +1252,12 @@ plenty — Next.js resizes them per device.
 
 ## Known simplifications (intentional, for a learning project)
 
+- **One database lookup per signed-in request.** `getCurrentUser()`
+  re-reads the account (a primary-key lookup of five columns, once per
+  request via `cache()`) so that suspending someone takes effect on their
+  next click. That's the deliberate price of instant revocation with
+  stateless JWT sessions; caching it across requests would bring back a
+  window where a suspended account still works.
 - **No self-serve registration.** Only the seed script creates users right
   now. Admin-driven account creation arrives with Phase 2 member/trainer
   management.

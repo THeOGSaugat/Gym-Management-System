@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { optionalDate, optionalTrimmedString } from "./shared";
+import { optionalPastOrPresentDate, optionalTrimmedString } from "./shared";
 
 export const progressMetricValues = [
   "WEIGHT_KG",
@@ -25,7 +25,7 @@ export const progressLogSchema = z
       .max(1000, "That value looks unrealistic — double-check it"),
     notes: optionalTrimmedString(300),
     // Defaults to now in the service if omitted.
-    recordedAt: optionalDate(),
+    recordedAt: optionalPastOrPresentDate(),
   })
   .refine((data) => data.metric !== "CUSTOM" || !!data.customLabel, {
     message: "Give this custom metric a short label",

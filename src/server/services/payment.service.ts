@@ -4,6 +4,8 @@ import { ForbiddenError, NotFoundError, ConflictError } from "@/lib/errors";
 import { createNotification } from "@/server/services/notification.service";
 import { formatMinorUnits } from "@/lib/money";
 import type { PaymentMethod, PaymentStatus } from "@/generated/prisma/client";
+import { clampPage } from "@/lib/pagination";
+import { withAudit } from "@/server/services/audit.service";
 
 const PAYMENTS_PER_PAGE = 20;
 
@@ -47,20 +49,37 @@ export async function recordPayment(actor: Actor, memberId: string, input: Recor
     currency = membership.currencySnapshot;
   }
 
-  const payment = await db.payment.create({
-    data: {
-      memberId,
-      membershipId: input.membershipId,
-      amountMinor: input.amountMinor,
-      currency,
-      method: input.method,
-      status: input.status,
-      reference: input.reference,
-      notes: input.notes,
-      paidAt: input.paidAt ?? new Date(),
-      recordedByUserId: actor.id,
-    },
-  });
+  const payment = await withAudit(
+    actor,
+    (tx) =>
+      tx.payment.create({
+        data: {
+          memberId,
+          membershipId: input.membershipId,
+          amountMinor: input.amountMinor,
+          currency,
+          method: input.method,
+          status: input.status,
+          reference: input.reference,
+          notes: input.notes,
+          paidAt: input.paidAt ?? new Date(),
+          recordedByUserId: actor.id,
+        },
+      }),
+    (created) => ({
+      action: "PAYMENT_RECORDED",
+      entityType: "Payment",
+      entityId: created.id,
+      subjectUserId: memberId,
+      summary: `Recorded ${formatMinorUnits(created.amountMinor, created.currency)} payment from ${member.fullName}`,
+      metadata: {
+        amountMinor: created.amountMinor,
+        currency: created.currency,
+        method: created.method,
+        status: created.status,
+      },
+    }),
+  );
 
   // A fresh notification per payment, deliberately not deduped like the
   // membership-expiry ones — every payment row is already a genuinely
@@ -119,7 +138,7 @@ export async function listPayments(actor: Actor, params: ListPaymentsParams = {}
     throw new ForbiddenError("Only admins can view all payments.");
   }
 
-  const page = Math.max(1, params.page ?? 1);
+  const page = clampPage(params.page);
   const search = params.search?.trim();
 
   const where = {

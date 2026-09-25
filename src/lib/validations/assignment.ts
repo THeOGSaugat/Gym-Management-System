@@ -1,7 +1,8 @@
 import { z } from "zod";
+import { requiredIdField } from "./shared";
 
 export const assignTrainerSchema = z.object({
-  trainerId: z.string().trim().min(1, "Choose a trainer"),
+  trainerId: requiredIdField("Choose a trainer"),
 });
 
 export type AssignTrainerInput = z.infer<typeof assignTrainerSchema>;

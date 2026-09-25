@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
+import { parseBooleanArg, parseIdArg } from "@/lib/validations/action-args";
 import { createPlan, updatePlan, setPlanActive } from "@/server/services/plan.service";
 import { planSchema } from "@/lib/validations/plan";
 import { AppError } from "@/lib/errors";
@@ -47,6 +48,7 @@ export async function updatePlanAction(
   formData: FormData,
 ): Promise<PlanFormState> {
   const actor = await requireRole("ADMIN");
+  planId = parseIdArg(planId);
 
   const parsed = planSchema.safeParse(readPlanFormFields(formData));
   if (!parsed.success) {
@@ -67,6 +69,8 @@ export async function updatePlanAction(
 
 export async function setPlanActiveAction(planId: string, isActive: boolean) {
   const actor = await requireRole("ADMIN");
+  planId = parseIdArg(planId);
+  isActive = parseBooleanArg(isActive);
   await setPlanActive(actor, planId, isActive);
   revalidatePath("/admin/plans");
   revalidatePath(`/admin/plans/${planId}`);

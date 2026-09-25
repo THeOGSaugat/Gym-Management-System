@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { parsePageParam } from "@/lib/pagination";
 
 export const metadata: Metadata = {
   title: "Attendance history",
@@ -38,7 +39,7 @@ export default async function AttendanceHistoryPage({
   const search = params.q?.trim() || undefined;
   const dateFrom = params.from ? new Date(params.from) : undefined;
   const dateTo = params.to ? new Date(params.to) : undefined;
-  const page = Math.max(1, Number(params.page) || 1);
+  const page = parsePageParam(params.page);
 
   const { items, total, totalPages } = await listAttendanceHistory(actor, {
     search,

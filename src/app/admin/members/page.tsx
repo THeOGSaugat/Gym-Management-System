@@ -20,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { UserStatus } from "@/generated/prisma/client";
+import { parsePageParam } from "@/lib/pagination";
 
 export const metadata: Metadata = {
   title: "Members",
@@ -39,7 +40,7 @@ export default async function MembersPage({
 
   const search = params.q?.trim() || undefined;
   const status = isUserStatus(params.status) ? params.status : undefined;
-  const page = Math.max(1, Number(params.page) || 1);
+  const page = parsePageParam(params.page);
 
   const { items, total, totalPages } = await listMembers(actor, { search, status, page });
 

@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
+import { parseBooleanArg, parseIdArg } from "@/lib/validations/action-args";
 import { createExercise, updateExercise, setExerciseActive } from "@/server/services/exercise.service";
 import { exerciseSchema } from "@/lib/validations/exercise";
 import { AppError } from "@/lib/errors";
@@ -47,6 +48,7 @@ export async function updateExerciseAction(
   formData: FormData,
 ): Promise<ExerciseFormState> {
   const actor = await requireRole("ADMIN");
+  exerciseId = parseIdArg(exerciseId);
 
   const parsed = exerciseSchema.safeParse(readExerciseFormFields(formData));
   if (!parsed.success) {
@@ -67,6 +69,8 @@ export async function updateExerciseAction(
 
 export async function setExerciseActiveAction(exerciseId: string, isActive: boolean) {
   const actor = await requireRole("ADMIN");
+  exerciseId = parseIdArg(exerciseId);
+  isActive = parseBooleanArg(isActive);
   await setExerciseActive(actor, exerciseId, isActive);
   revalidatePath("/admin/exercises");
   revalidatePath(`/admin/exercises/${exerciseId}`);

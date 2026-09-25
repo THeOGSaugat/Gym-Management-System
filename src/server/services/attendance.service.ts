@@ -9,6 +9,7 @@ import { ForbiddenError, NotFoundError, ConflictError } from "@/lib/errors";
 import { startOfDay } from "@/lib/date";
 import { isUniqueConstraintError } from "@/server/prisma-errors";
 import type { AttendanceMethod } from "@/generated/prisma/client";
+import { clampPage } from "@/lib/pagination";
 
 const HISTORY_PAGE_SIZE = 20;
 
@@ -120,7 +121,7 @@ export async function listAttendanceForMember(actor: Actor, memberId: string, pa
     throw new ForbiddenError("You don't have permission to view this member's attendance.");
   }
 
-  const safePage = Math.max(1, page);
+  const safePage = clampPage(page);
   const where = { memberId };
 
   const [items, total] = await Promise.all([
@@ -170,7 +171,7 @@ export async function listAttendanceHistory(actor: Actor, params: AttendanceHist
     throw new ForbiddenError("Only admins can view attendance history.");
   }
 
-  const page = Math.max(1, params.page ?? 1);
+  const page = clampPage(params.page);
   const search = params.search?.trim();
 
   const where = {

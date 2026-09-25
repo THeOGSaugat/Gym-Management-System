@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
+import { parseEnumArg, parseIdArg } from "@/lib/validations/action-args";
 import {
   updateWorkoutPlan,
   setWorkoutPlanStatus,
@@ -24,6 +25,7 @@ export async function updateWorkoutPlanAction(
   formData: FormData,
 ): Promise<WorkoutPlanFormState> {
   const actor = await requireRole("TRAINER");
+  planId = parseIdArg(planId);
 
   const parsed = workoutPlanSchema.safeParse({
     name: formData.get("name"),
@@ -48,6 +50,8 @@ export async function updateWorkoutPlanAction(
 
 export async function setWorkoutPlanStatusAction(planId: string, status: WorkoutPlanStatus) {
   const actor = await requireRole("TRAINER");
+  planId = parseIdArg(planId);
+  status = parseEnumArg(status, ["ACTIVE", "COMPLETED", "CANCELLED"]);
   await setWorkoutPlanStatus(actor, planId, status);
   revalidatePath(`/trainer/workout-plans/${planId}`);
 }
@@ -58,6 +62,7 @@ export async function addWorkoutDayAction(
   formData: FormData,
 ): Promise<WorkoutDayFormState> {
   const actor = await requireRole("TRAINER");
+  planId = parseIdArg(planId);
 
   const parsed = workoutDaySchema.safeParse({
     label: formData.get("label"),
@@ -80,6 +85,8 @@ export async function addWorkoutDayAction(
 
 export async function removeWorkoutDayAction(planId: string, workoutDayId: string) {
   const actor = await requireRole("TRAINER");
+  planId = parseIdArg(planId);
+  workoutDayId = parseIdArg(workoutDayId);
   await removeWorkoutDay(actor, workoutDayId);
   revalidatePath(`/trainer/workout-plans/${planId}`);
   // Back to the day list: the URL still carries ?day=<the id just deleted>,
@@ -94,6 +101,8 @@ export async function addWorkoutExerciseAction(
   formData: FormData,
 ): Promise<WorkoutExerciseFormState> {
   const actor = await requireRole("TRAINER");
+  planId = parseIdArg(planId);
+  workoutDayId = parseIdArg(workoutDayId);
 
   const parsed = workoutExerciseSchema.safeParse({
     exerciseId: formData.get("exerciseId"),
@@ -120,6 +129,8 @@ export async function addWorkoutExerciseAction(
 
 export async function removeWorkoutExerciseAction(planId: string, workoutExerciseId: string) {
   const actor = await requireRole("TRAINER");
+  planId = parseIdArg(planId);
+  workoutExerciseId = parseIdArg(workoutExerciseId);
   await removeWorkoutExercise(actor, workoutExerciseId);
   revalidatePath(`/trainer/workout-plans/${planId}`);
 }

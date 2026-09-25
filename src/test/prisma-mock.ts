@@ -14,4 +14,13 @@ export const prismaMock = mockDeep<PrismaClient>() as unknown as DeepMockProxy<P
 
 export function resetPrismaMock() {
   mockReset(prismaMock);
+  // By default an interactive transaction just runs its callback against
+  // the same mock (and a batch resolves its array), so services that wrap
+  // a write in a transaction — e.g. withAudit() — are tested on the calls
+  // they make. Tests that care about transaction behavior still override
+  // this with their own mockImplementation.
+  prismaMock.$transaction.mockImplementation((async (arg: unknown) =>
+    typeof arg === "function"
+      ? (arg as (tx: typeof prismaMock) => unknown)(prismaMock)
+      : Promise.all(arg as Promise<unknown>[])) as never);
 }

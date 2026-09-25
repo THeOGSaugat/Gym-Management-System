@@ -1,47 +1,84 @@
+import { db } from "@/server/db";
+
 /**
- * Minimal in-memory sliding-window-ish rate limiter.
+ * Fixed-window rate limiter backed by Postgres (the `rate_limit_buckets`
+ * table), so every server instance — or serverless function — shares the
+ * same counters. An in-memory Map, which this replaced, only limited each
+ * instance on its own and forgot everything on restart.
  *
- * Deliberately NOT Redis-backed: this app runs as a single process in dev
- * and on a single instance in production for now, so a Map is sufficient.
- * Known limitations (fine for a learning project, revisit if the app ever
- * runs on multiple server instances or serverless functions with no shared
- * state):
- *   - State resets on every server restart / redeploy.
- *   - State is NOT shared across multiple server instances — each instance
- *     enforces its own limit independently.
- * If this ever becomes a real problem, swap this module for a durable
- * store (e.g. Upstash Redis) without changing any caller.
+ * No Redis or other new infrastructure: the app already has a database,
+ * and login attempts are rare enough that one small upsert per attempt is
+ * negligible.
  */
 
-type Bucket = {
-  count: number;
-  resetAt: number;
-};
+export type RateLimitResult = { allowed: true } | { allowed: false; retryAfterMs: number };
 
-const buckets = new Map<string, Bucket>();
-
-export type RateLimitResult =
-  | { allowed: true }
-  | { allowed: false; retryAfterMs: number };
+type BucketRow = { count: number; resetAt: Date };
 
 /**
+ * Counts one attempt against `key` and says whether it's within `limit`
+ * for the current `windowMs` window.
+ *
+ * A single atomic statement does the whole read-modify-write: it inserts
+ * a fresh bucket, or increments the existing one — restarting it at 1 if
+ * its window has passed. Two simultaneous attempts can never both read
+ * the same count, which a separate SELECT-then-UPDATE would allow.
+ *
+ * Timestamps are compared in UTC, matching how Prisma stores DateTime in
+ * a `timestamp without time zone` column.
+ *
  * @param key unique identifier for what's being limited, e.g. `login:${email}`
  * @param limit max allowed attempts within the window
  * @param windowMs window length in milliseconds
  */
-export function checkRateLimit(key: string, limit: number, windowMs: number): RateLimitResult {
-  const now = Date.now();
-  const bucket = buckets.get(key);
+export async function checkRateLimit(
+  key: string,
+  limit: number,
+  windowMs: number,
+): Promise<RateLimitResult> {
+  const rows = await db.$queryRaw<BucketRow[]>`
+    INSERT INTO "rate_limit_buckets" ("key", "count", "resetAt")
+    VALUES (
+      ${key},
+      1,
+      (now() AT TIME ZONE 'UTC') + make_interval(secs => ${windowMs / 1000}::double precision)
+    )
+    ON CONFLICT ("key") DO UPDATE SET
+      "count" = CASE
+        WHEN "rate_limit_buckets"."resetAt" <= (now() AT TIME ZONE 'UTC') THEN 1
+        ELSE "rate_limit_buckets"."count" + 1
+      END,
+      "resetAt" = CASE
+        WHEN "rate_limit_buckets"."resetAt" <= (now() AT TIME ZONE 'UTC') THEN EXCLUDED."resetAt"
+        ELSE "rate_limit_buckets"."resetAt"
+      END
+    RETURNING "count", "resetAt"
+  `;
 
-  if (!bucket || bucket.resetAt <= now) {
-    buckets.set(key, { count: 1, resetAt: now + windowMs });
-    return { allowed: true };
-  }
+  maybeSweepExpired();
 
-  if (bucket.count >= limit) {
-    return { allowed: false, retryAfterMs: bucket.resetAt - now };
-  }
+  const bucket = rows[0];
+  if (!bucket) throw new Error("Rate limit update returned no row.");
 
-  bucket.count += 1;
-  return { allowed: true };
+  if (bucket.count <= limit) return { allowed: true };
+  return { allowed: false, retryAfterMs: Math.max(0, bucket.resetAt.getTime() - Date.now()) };
+}
+
+/**
+ * Every distinct key (every email anyone ever typed at the login form)
+ * leaves a row behind, so expired rows are deleted now and then — on
+ * roughly one call in 50, in the background, never delaying the caller.
+ * A failed sweep is harmless: the next one catches up.
+ */
+const SWEEP_PROBABILITY = 1 / 50;
+
+function maybeSweepExpired() {
+  if (Math.random() >= SWEEP_PROBABILITY) return;
+  void sweepExpiredRateLimits().catch((error) => {
+    console.error("Rate limit sweep failed:", error);
+  });
+}
+
+export function sweepExpiredRateLimits() {
+  return db.rateLimitBucket.deleteMany({ where: { resetAt: { lt: new Date() } } });
 }

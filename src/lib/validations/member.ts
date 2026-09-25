@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isBlank, optionalTrimmedString } from "./shared";
+import { emailSchema, isBlank, newPasswordSchema, optionalTrimmedString } from "./shared";
 
 const optionalDateOfBirth = z.preprocess(
   (value) => (isBlank(value) ? undefined : value),
@@ -17,12 +17,7 @@ const memberContactFields = {
   emergencyContactPhone: optionalTrimmedString(20),
 };
 
-const emailField = z
-  .string()
-  .trim()
-  .toLowerCase()
-  .min(1, "Email is required")
-  .email("Enter a valid email address");
+const emailField = emailSchema;
 
 const fullNameField = z
   .string()
@@ -38,7 +33,7 @@ export const createMemberSchema = z.object({
   // later phase), so the admin sets an initial password directly. The
   // member is expected to be told to change it — there's no forced
   // password-change-on-first-login yet either. See README for the note.
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  password: newPasswordSchema,
   dateOfBirth: optionalDateOfBirth,
   ...memberContactFields,
 });

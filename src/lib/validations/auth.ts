@@ -12,8 +12,10 @@ export const loginSchema = z.object({
     .trim()
     .toLowerCase()
     .min(1, "Email is required")
+    .max(254, "Enter a valid email address")
     .email("Enter a valid email address"),
-  password: z.string().min(1, "Password is required"),
+  // Bounded so a multi-megabyte "password" never reaches bcrypt.
+  password: z.string().min(1, "Password is required").max(1024, "Password is too long"),
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;

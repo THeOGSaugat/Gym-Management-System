@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
+import { parseEnumArg, parseIdArg } from "@/lib/validations/action-args";
 import {
   createTrainer,
   updateTrainer,
@@ -57,6 +58,7 @@ export async function updateTrainerAction(
   formData: FormData,
 ): Promise<TrainerFormState> {
   const actor = await requireRole("ADMIN");
+  trainerId = parseIdArg(trainerId);
 
   const parsed = updateTrainerSchema.safeParse(readTrainerFormFields(formData));
 
@@ -78,6 +80,8 @@ export async function updateTrainerAction(
 
 export async function setTrainerStatusAction(trainerId: string, nextStatus: "ACTIVE" | "SUSPENDED") {
   const actor = await requireRole("ADMIN");
+  trainerId = parseIdArg(trainerId);
+  nextStatus = parseEnumArg(nextStatus, ["ACTIVE", "SUSPENDED"]);
   await setTrainerStatus(actor, trainerId, nextStatus);
   revalidatePath("/admin/trainers");
   revalidatePath(`/admin/trainers/${trainerId}`);

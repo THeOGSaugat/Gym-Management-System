@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isBlank, optionalTrimmedString } from "./shared";
+import { emailSchema, isBlank, newPasswordSchema, optionalTrimmedString } from "./shared";
 
 const optionalExperienceYears = z.preprocess(
   (value) => (isBlank(value) ? undefined : value),
@@ -17,12 +17,7 @@ const fullNameField = z
   .min(1, "Full name is required")
   .max(120, "Full name is too long");
 
-const emailField = z
-  .string()
-  .trim()
-  .toLowerCase()
-  .min(1, "Email is required")
-  .email("Enter a valid email address");
+const emailField = emailSchema;
 
 const trainerProfileFields = {
   phone: optionalTrimmedString(20),
@@ -37,7 +32,7 @@ export const createTrainerSchema = z.object({
   email: emailField,
   // Same reasoning as createMemberSchema: no invite-by-email flow yet,
   // so the admin sets an initial password directly.
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  password: newPasswordSchema,
   ...trainerProfileFields,
 });
 

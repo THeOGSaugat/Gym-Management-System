@@ -287,3 +287,13 @@ export function canViewMemberDashboard(actor: Actor): boolean {
 export function canAccessNotification(actor: Actor, recipientUserId: string): boolean {
   return actor.id === recipientUserId;
 }
+
+/**
+ * Who can read the audit log: admins only. Nobody — admin included — can
+ * change or delete an entry: there is no service function for it, and the
+ * database itself rejects UPDATE/DELETE/TRUNCATE on the table (see the
+ * add_audit_log_and_rate_limits migration).
+ */
+export function canViewAuditLog(actor: Actor): boolean {
+  return actor.role === "ADMIN";
+}
