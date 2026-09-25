@@ -10,9 +10,11 @@ import type { AttendanceActionState } from "@/app/member/attendance/actions";
  * The member's single most frequent action, given the weight it deserves.
  *
  * Checking in is a thing people do standing in a doorway holding a gym bag,
- * so it is one full-width 48px control with the current state stated in
- * words directly above it, on both the home screen and the attendance page
- * — rather than a normal-sized button several taps deep. The surface turns
+ * so on phones it is one full-width 48px control with the current state
+ * stated in words directly above it, on both the home screen and the
+ * attendance page — rather than a normal-sized button several taps deep. On
+ * wider screens the status and the button sit side by side instead of the
+ * button stretching across a laptop-width card. The surface turns
  * green while a session is open so the state is legible at a glance, but the
  * status is always written out too.
  */
@@ -35,13 +37,13 @@ export function CheckInPanel({
   return (
     <div
       className={cn(
-        "flex flex-col gap-4 rounded-xl border p-5 shadow-xs transition-colors",
+        "flex flex-col gap-4 rounded-xl border p-5 shadow-xs transition-colors md:grid md:grid-cols-[1fr_15rem] md:items-center md:gap-x-6",
         isCheckedIn
           ? "border-success-border bg-success-subtle"
           : "border-border bg-card"
       )}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3 md:flex-row-reverse md:items-center md:justify-end md:gap-4">
         <div className="flex flex-col gap-1">
           <p
             className={cn(
@@ -64,7 +66,7 @@ export function CheckInPanel({
           className={cn(
             "flex size-11 shrink-0 items-center justify-center rounded-full",
             isCheckedIn
-              ? "bg-success text-white"
+              ? "bg-success text-primary-foreground"
               : "bg-primary-subtle text-primary-subtle-foreground"
           )}
         >
@@ -93,7 +95,7 @@ export function CheckInPanel({
       {state?.error ? (
         <p
           role="alert"
-          className="flex items-start gap-2 text-sm font-medium text-destructive-foreground"
+          className="flex items-start gap-2 text-sm font-medium text-destructive-foreground md:col-span-2"
         >
           <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           {state.error}

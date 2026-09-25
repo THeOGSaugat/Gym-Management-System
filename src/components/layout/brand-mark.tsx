@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { Dumbbell } from "lucide-react";
+import { Infinity as InfinityIcon } from "lucide-react";
+import { BRAND } from "@/lib/brand";
 import { cn } from "cn";
 
 /**
- * The product lockup: brand-coloured mark plus wordmark, optionally showing
+ * The Infinity Fitness lockup: brand-coloured mark plus wordmark, optionally showing
  * which role's area you're in. The role sits directly under the product name
  * so "what am I signed in as" is answerable without opening a menu.
  */
@@ -30,7 +31,7 @@ export function BrandMark({
         aria-hidden="true"
         className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-xs"
       >
-        <Dumbbell className="size-4.5" />
+        <InfinityIcon className="size-5" />
       </span>
       <span className="flex min-w-0 flex-col leading-tight">
         <span
@@ -39,7 +40,7 @@ export function BrandMark({
             compact ? "text-sm" : "text-[0.9375rem]"
           )}
         >
-          Gym Management
+          {BRAND.name}
         </span>
         {role ? (
           <span className="truncate text-[0.6875rem] font-medium tracking-wide text-muted-foreground uppercase">

@@ -39,7 +39,7 @@ export function ProgressSummary({
   if (groups.length === 0) return null;
 
   return (
-    <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <ul className="grid grid-cols-2 gap-3 lg:grid-cols-[repeat(auto-fit,minmax(12rem,1fr))]">
       {groups.map((entries) => {
         const latest = entries[0];
         if (!latest) return null;

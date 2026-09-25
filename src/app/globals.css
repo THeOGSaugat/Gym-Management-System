@@ -3,20 +3,23 @@
 @import "shadcn/tailwind.css";
 
 /*
- * Dark mode is deliberately NOT shipped in this phase (see README, "How the
- * design system works"). The `dark` variant is kept pointing at a `.dark`
- * class that nothing ever sets, so the `dark:` utilities still present in the
- * vendored shadcn/base-ui primitives compile to inert CSS rather than
- * silently activating a half-built dark theme via prefers-color-scheme.
- * New components in this codebase should not add `dark:` utilities.
+ * Infinity Fitness is a single black-and-green theme everywhere — the public
+ * site and all three portals. There is no light/dark toggle: the tokens in
+ * `:root` below ARE the theme, and the root layout sets `.dark` on <html> so
+ * the few `dark:` utilities in vendored shadcn/base-ui primitives pick their
+ * dark-surface styling. New components should use the tokens, not `dark:`.
  */
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
+  /* The system UI font stack most websites use: San Francisco on Apple
+     devices, Segoe UI on Windows, Roboto on Android. Nothing to download,
+     and it always looks native to the visitor's device. */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "Noto Sans", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --font-heading: var(--font-sans);
 
   --color-ring: var(--ring);
@@ -31,6 +34,7 @@
 
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-strong: var(--primary-strong);
   --color-primary-subtle: var(--primary-subtle);
   --color-primary-subtle-foreground: var(--primary-subtle-foreground);
 
@@ -78,71 +82,96 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
 
-  --shadow-xs: 0 1px 2px 0 oklch(0.2 0.02 265 / 0.04);
-  --shadow-sm:
-    0 1px 2px 0 oklch(0.2 0.02 265 / 0.05), 0 1px 3px 0 oklch(0.2 0.02 265 / 0.05);
-  --shadow-md:
-    0 2px 4px -2px oklch(0.2 0.02 265 / 0.06), 0 4px 10px -2px oklch(0.2 0.02 265 / 0.08);
-  --shadow-lg:
-    0 8px 24px -8px oklch(0.2 0.02 265 / 0.14), 0 2px 6px -2px oklch(0.2 0.02 265 / 0.06);
+  /* On a near-black canvas shadows need real opacity to register at all. */
+  --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.35);
+  --shadow-sm: 0 1px 2px 0 oklch(0 0 0 / 0.4), 0 1px 3px 0 oklch(0 0 0 / 0.3);
+  --shadow-md: 0 2px 4px -2px oklch(0 0 0 / 0.45), 0 6px 14px -4px oklch(0 0 0 / 0.45);
+  --shadow-lg: 0 12px 32px -10px oklch(0 0 0 / 0.6), 0 2px 6px -2px oklch(0 0 0 / 0.4);
+
+  /* Marketing aliases: the landing page speaks in "ink" (the black stage)
+     and "brand" (the green), but they are the same tokens as the app. */
+  --color-ink: var(--background);
+  --color-ink-raised: var(--card);
+  --color-ink-line: var(--border);
+  --color-brand: var(--primary);
+  --color-brand-strong: var(--primary-strong);
+}
+
+/* Landing page motion: the scrolling training-word ribbons. */
+@theme {
+  --animate-marquee: marquee 28s linear infinite;
+  --animate-marquee-reverse: marquee 32s linear infinite reverse;
+
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
 }
 
 :root {
-  /* Neutrals: a very slightly cool grey ramp so white cards read as raised
-     surfaces against the page rather than blending into it. */
-  --background: oklch(0.984 0.002 265);
-  --foreground: oklch(0.19 0.012 265);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.19 0.012 265);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.19 0.012 265);
-  --muted: oklch(0.964 0.004 265);
-  --muted-foreground: oklch(0.523 0.018 265);
-  --accent: oklch(0.964 0.004 265);
-  --accent-foreground: oklch(0.24 0.014 265);
-  --secondary: oklch(0.955 0.005 265);
-  --secondary-foreground: oklch(0.26 0.014 265);
-  --border: oklch(0.916 0.006 265);
-  --border-strong: oklch(0.86 0.008 265);
-  --input: oklch(0.888 0.008 265);
+  color-scheme: dark;
 
-  /* Brand: one confident azure-indigo. Used for primary actions, active
-     navigation and informational status — deliberately the only non-neutral
-     hue in the chrome of the app. */
-  --primary: oklch(0.53 0.185 264);
-  --primary-foreground: oklch(0.99 0.002 265);
-  --primary-subtle: oklch(0.958 0.024 264);
-  --primary-subtle-foreground: oklch(0.44 0.17 264);
-  --ring: oklch(0.53 0.185 264);
+  /* Neutrals: near-black with the faintest green cast, stepping up in
+     lightness so cards and popovers read as raised surfaces. */
+  --background: oklch(0.145 0.005 155);
+  --foreground: oklch(0.965 0.004 155);
+  --card: oklch(0.188 0.006 155);
+  --card-foreground: oklch(0.965 0.004 155);
+  --popover: oklch(0.208 0.007 155);
+  --popover-foreground: oklch(0.965 0.004 155);
+  --muted: oklch(0.235 0.007 155);
+  --muted-foreground: oklch(0.72 0.012 155);
+  --accent: oklch(0.25 0.008 155);
+  --accent-foreground: oklch(0.965 0.004 155);
+  --secondary: oklch(0.25 0.007 155);
+  --secondary-foreground: oklch(0.93 0.004 155);
+  --border: oklch(0.285 0.008 155);
+  --border-strong: oklch(0.36 0.01 155);
+  --input: oklch(0.34 0.01 155);
 
-  --success: oklch(0.58 0.14 155);
-  --success-foreground: oklch(0.36 0.1 155);
-  --success-subtle: oklch(0.955 0.038 155);
-  --success-border: oklch(0.86 0.07 155);
+  /* Brand: one vivid green, the only saturated hue in the chrome. Text on
+     it is near-black (≈10:1) — white on a green this bright would fail AA. */
+  --primary: oklch(0.77 0.2 149);
+  --primary-strong: oklch(0.71 0.2 149);
+  --primary-foreground: oklch(0.17 0.03 150);
+  --primary-subtle: oklch(0.27 0.055 150);
+  --primary-subtle-foreground: oklch(0.86 0.15 150);
+  --ring: oklch(0.77 0.2 149);
 
-  --warning: oklch(0.72 0.15 72);
-  --warning-foreground: oklch(0.44 0.11 62);
-  --warning-subtle: oklch(0.965 0.045 82);
-  --warning-border: oklch(0.87 0.09 78);
+  /* Status colors. Solid tones are only ever fills (bars, dots, buttons);
+     text always uses the lighter -foreground tone. Success leans teal and
+     info leans blue so neither is mistaken for the brand green. */
+  --success: oklch(0.72 0.14 170);
+  --success-foreground: oklch(0.84 0.12 170);
+  --success-subtle: oklch(0.26 0.045 170);
+  --success-border: oklch(0.42 0.08 170);
 
-  /* L 0.53 (not 0.577) keeps white button text above WCAG AA 4.5:1. */
-  --destructive: oklch(0.53 0.2 27);
-  --destructive-foreground: oklch(0.45 0.17 27);
-  --destructive-subtle: oklch(0.962 0.024 25);
-  --destructive-border: oklch(0.87 0.06 25);
+  --warning: oklch(0.8 0.15 80);
+  --warning-foreground: oklch(0.87 0.13 85);
+  --warning-subtle: oklch(0.28 0.05 80);
+  --warning-border: oklch(0.46 0.09 78);
 
-  --info: oklch(0.53 0.185 264);
-  --info-foreground: oklch(0.44 0.17 264);
-  --info-subtle: oklch(0.958 0.024 264);
-  --info-border: oklch(0.86 0.06 264);
+  /* L 0.55 keeps white button text above WCAG AA 4.5:1. */
+  --destructive: oklch(0.55 0.2 25);
+  --destructive-foreground: oklch(0.77 0.14 22);
+  --destructive-subtle: oklch(0.27 0.06 25);
+  --destructive-border: oklch(0.46 0.12 25);
 
-  /* Chart ramp: brand-led, stepping down in chroma rather than jumping hue,
-     so a multi-series chart still reads as one system. */
-  --chart-1: oklch(0.53 0.185 264);
-  --chart-2: oklch(0.63 0.13 245);
-  --chart-3: oklch(0.7 0.09 230);
-  --chart-4: oklch(0.78 0.06 250);
-  --chart-5: oklch(0.86 0.035 265);
+  --info: oklch(0.72 0.13 235);
+  --info-foreground: oklch(0.83 0.1 235);
+  --info-subtle: oklch(0.26 0.045 240);
+  --info-border: oklch(0.43 0.08 240);
+
+  /* Chart ramp: brand green stepping down in lightness and chroma. */
+  --chart-1: oklch(0.77 0.2 149);
+  --chart-2: oklch(0.68 0.16 158);
+  --chart-3: oklch(0.6 0.12 165);
+  --chart-4: oklch(0.5 0.08 170);
+  --chart-5: oklch(0.4 0.05 170);
 
   --radius: 0.625rem;
 }

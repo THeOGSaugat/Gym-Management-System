@@ -108,7 +108,7 @@ export function ConfirmAction({
       />
 
       <AlertDialog.Portal>
-        <AlertDialog.Backdrop className="fixed inset-0 z-50 bg-foreground/30 backdrop-blur-[2px] transition-opacity duration-200 data-closed:opacity-0 data-open:opacity-100" />
+        <AlertDialog.Backdrop className="fixed inset-0 z-50 bg-black/60 backdrop-blur-[2px] transition-opacity duration-200 data-closed:opacity-0 data-open:opacity-100" />
         <AlertDialog.Popup
           className={cn(
             "fixed z-50 flex flex-col gap-4 bg-popover p-5 text-popover-foreground shadow-lg outline-none transition-[transform,opacity] duration-200",

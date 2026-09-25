@@ -1058,21 +1058,28 @@ destination needed and which grants no access `getWorkoutPlan` didn't
 already allow).
 
 - **Tokens live in `globals.css`.** The palette is neutral surfaces plus
-  exactly one brand hue (an azure-indigo), and four semantic families —
+  exactly one brand hue (a vivid green on near-black), and four semantic
+  families —
   `success`, `warning`, `destructive`, `info` — each with a solid tone, a
   subtle surface and a readable foreground. Status is never carried by
   colour alone: `StatusBadge` pairs every colour with an icon *and* a
   text label, which is also why every domain status now goes through that
   one component instead of the per-page `STATUS_VARIANT` maps that used
   to drift between screens.
-- **Dark mode is deliberately not shipped.** The old CSS defined a full
-  `.dark` palette that nothing could ever activate — there was no theme
-  provider and no toggle. Rather than leave that half-built, the dead
-  token block is gone and the `dark` variant stays pointed at a class
-  nothing sets, so the `dark:` utilities still baked into the vendored
-  shadcn primitives compile to inert CSS. New components don't add
-  `dark:` utilities. Shipping dark mode later means adding the tokens
-  back plus a provider and a toggle, deliberately.
+- **One black-and-green theme, everywhere.** The public site, the login
+  page and all three portals share the same tokens: near-black surfaces
+  and a single green brand colour. Text on green is always near-black
+  (white on a green that bright fails WCAG AA). Success leans teal and
+  info leans blue so status colours are never mistaken for the brand.
+  There is no light/dark toggle — the `:root` tokens *are* the theme, and
+  the root layout sets `.dark` on `<html>` so the few `dark:` utilities in
+  vendored shadcn primitives use their dark-surface styling.
+- **Laptop and phone are both first-class.** Phones get the bottom tab
+  bar and stacked, full-width controls; from `lg` up the sidebar takes
+  over, content widens to `max-w-6xl`, and controls that would stretch
+  across a laptop-width card (e.g. the member check-in button) sit beside
+  their label instead. The login page gains a full-height photo panel on
+  laptops.
 - **Navigation is role-shaped, defined once in `nav-config.ts`.** ADMIN
   has too many destinations for a tab bar, so it gets a grouped sidebar
   on desktop (People / Finance / Operations) and a drawer on mobile;
@@ -1119,6 +1126,27 @@ already allow).
   route transition resolves into roughly the layout that's arriving,
   rather than a spinner. The heaviest pages (member detail, workout plan
   detail) previously had none at all.
+
+## Landing page imagery
+
+The public homepage (`/`) uses a poster-style look in the app's
+black-and-green theme (Oswald display headlines, scrolling training-word
+ribbons). The hero photo is a full-bleed background behind the headline, and
+the pull-up photo bleeds off the edge of the "Why" section (it is also the
+login page's laptop photo panel). It has two photo slots. It never hot-links images from
+third-party URLs — each slot reads a local file from `public/`, and until that
+file exists it renders a placeholder at the same size:
+
+| Slot | File | Subject |
+|---|---|---|
+| Hero | `public/images/landing/hero.jpg` | Athlete doing a dumbbell curl (portrait, ~4:5) |
+| Why Infinity Fitness | `public/images/landing/pull-up.jpg` | Athlete doing pull-ups (portrait, 2:3) |
+
+To swap a photo, replace the file at the same path.
+
+Use photos you have the rights to (e.g. your own shoots, or a licensed stock
+library). They're served through `next/image`, so ~2000px on the long edge is
+plenty — Next.js resizes them per device.
 
 ## Known simplifications (intentional, for a learning project)
 

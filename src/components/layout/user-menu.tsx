@@ -56,6 +56,7 @@ export function UserMenu({
 
             <form action={logoutAction}>
               <Menu.Item
+                nativeButton
                 render={
                   <button
                     type="submit"
