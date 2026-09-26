@@ -7,6 +7,7 @@ import { paymentMethodLabel } from "@/lib/payment-display";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { zoned } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
   title: "Payments",
@@ -60,11 +61,14 @@ export default async function MyPaymentsPage() {
                     {formatMinorUnits(payment.amountMinor, payment.currency)}
                   </span>
                   <span className="text-[0.8125rem] text-muted-foreground">
-                    {payment.paidAt.toLocaleDateString(undefined, {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })}{" "}
+                    {payment.paidAt.toLocaleDateString(
+                      undefined,
+                      zoned({
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      }),
+                    )}{" "}
                     · {paymentMethodLabel(payment.method)}
                   </span>
                 </div>

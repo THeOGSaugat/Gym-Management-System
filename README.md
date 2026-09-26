@@ -1,4 +1,4 @@
-# Gym Management System
+# Infinity Fitness
 
 A production-style gym management application for Admins, Trainers and
 Members — member management, memberships, payments, attendance, trainer
@@ -549,6 +549,62 @@ npm run start
 
 `npm run build` runs Prisma client generation and the Next.js production
 build, and fails loudly on type errors since TypeScript strict mode is on.
+
+Running `next start` on http://localhost needs `AUTH_TRUST_HOST=true`
+(Auth.js only trusts the request's host automatically on Vercel or when
+`AUTH_URL` is set): `AUTH_TRUST_HOST=true npm run start`.
+
+## 16. Deploy to production (Vercel + Neon)
+
+### Environment variables
+
+| Variable | Local dev | Production (Vercel) | Notes |
+|---|---|---|---|
+| `DATABASE_URL` | required | **required** | Neon **pooled** connection string (host contains `-pooler`), `?sslmode=require` (or `verify-full`). Use a *separate* production database/branch — never the dev one. |
+| `AUTH_SECRET` | required | **required** | A new random value for production (`npx auth secret` or `openssl rand -base64 33`); never reuse the dev secret. Auth.js refuses to run in production without it. |
+| `APP_TIME_ZONE` | optional | **strongly recommended** | IANA zone the gym operates in, e.g. `Asia/Kathmandu`. Vercel servers run in UTC and reserve `TZ`, so without this every displayed time is shown in UTC. |
+| `TRUSTED_PROXY_HOPS` | optional | optional (leave unset = 1) | Vercel overwrites `X-Forwarded-For` with the single real client IP, so the default `1` is correct. Only change it if another proxy is added in front. |
+| `AUTH_URL` / `AUTH_TRUST_HOST` | — | not needed on Vercel | Auth.js trusts the host automatically when Vercel's `VERCEL` variable is present. Needed only for `next start` elsewhere. |
+| `NODE_ENV` | set in `.env` | **do not set** | Vercel manages it. |
+
+Secure cookies are automatic: Auth.js uses `__Secure-` cookies whenever
+the site is served over HTTPS.
+
+### First deployment
+
+1. **Create the production database.** In Neon, create a new project (or
+   a dedicated `production` branch) and copy its **pooled** connection
+   string.
+2. **Apply the migrations** to it from your machine (never `db push`, and
+   never the demo seed):
+   ```bash
+   DATABASE_URL="<production pooled URL>" npm run db:migrate:deploy
+   DATABASE_URL="<production pooled URL>" npx prisma migrate status   # "up to date"
+   ```
+   If `migrate deploy` ever has trouble through the pooler, run it with
+   the **direct** (non-`-pooler`) connection string instead — only for the
+   migration; the app itself should keep the pooled URL.
+3. **Create the first admin** (the demo seed refuses to run in
+   production, and its passwords are public):
+   ```bash
+   read -s ADMIN_PASSWORD && export ADMIN_PASSWORD   # 12+ characters, not echoed
+   DATABASE_URL="<production pooled URL>" npm run db:create-admin -- --email you@yourgym.com --name "Your Name"
+   unset ADMIN_PASSWORD
+   ```
+   Trainers, plans and members are then created from the admin portal.
+4. **Import the GitHub repo into Vercel** (framework: Next.js — the
+   defaults for install/build/output are correct; no `vercel.json` is
+   needed) and add `DATABASE_URL`, `AUTH_SECRET` and `APP_TIME_ZONE` under
+   *Settings → Environment Variables* for the **Production** environment.
+   Preview deployments should point at a separate (e.g. Neon branch)
+   database, not production.
+5. **Deploy** from `main`. The build runs `prisma generate && next build`;
+   migrations are deliberately *not* part of the build, so a preview build
+   can never change the production schema — run step 2 again whenever a
+   new migration ships, before deploying the code that needs it.
+
+The function region should sit close to the database: Neon `us-east-2`
+(Ohio) pairs well with Vercel's default `iad1` (Washington, D.C.).
 
 ## How authentication & authorization work
 
@@ -1258,31 +1314,18 @@ plenty — Next.js resizes them per device.
   next click. That's the deliberate price of instant revocation with
   stateless JWT sessions; caching it across requests would bring back a
   window where a suspended account still works.
-- **No self-serve registration.** Only the seed script creates users right
-  now. Admin-driven account creation arrives with Phase 2 member/trainer
-  management.
-- **Rate limiting is in-memory** (`src/lib/rate-limit.ts`), not
-  Redis-backed. It resets on every server restart and isn't shared across
-  multiple server instances. Fine for dev and a single-instance deploy;
-  swap for a durable store (e.g. Upstash Redis) if the app ever runs on
-  multiple instances.
-- **No instant session revocation.** Sessions are stateless JWTs valid up
-  to 8 hours. If an admin ever suspends a user (a Phase 2+ feature — there's
-  no admin UI for it yet), that user's *existing* session stays valid until
-  it naturally expires; only new login attempts are blocked immediately
-  (`authorize()` checks `status === "ACTIVE"` on every login). Instant
-  revocation would need a `tokenVersion`-style check on every request,
-  which isn't worth the complexity until there's a real feature that needs
-  it.
+- **No self-serve registration.** Members and trainers are created by an
+  admin in the app; the first admin of a new database is created with
+  `npm run db:create-admin` (see "Deploy to production").
 - **No password reset flow yet** — needs transactional email, which isn't
   wired up. Coming with Phase 9 (notifications) or sooner if needed earlier.
 - **Admin sets a member's initial password directly** when creating their
   account (no invite-by-email flow, since there's no email infra yet).
   There's no forced password-change-on-first-login either — the member is
   simply expected to be told to change it.
-- **Only MEMBER accounts have an admin-facing creation UI.** ADMIN and
-  TRAINER accounts still only come from the seed script — building
-  trainer management is explicitly out of scope for Phase 2.
+- **No in-app way to create another ADMIN.** Members and trainers are
+  created from the admin portal; admin accounts come only from
+  `npm run db:create-admin` (production) or the demo seed (development).
 - **No hard delete for members**, only deactivate (status → SUSPENDED).
   This matches the architecture doc's stance that financial/activity
   history must survive — appropriate even before that history exists.

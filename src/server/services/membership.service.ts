@@ -10,6 +10,7 @@ import {
 import { createNotificationOnce } from "@/server/services/notification.service";
 import type { Membership } from "@/generated/prisma/client";
 import { withAudit } from "@/server/services/audit.service";
+import { zoned } from "@/lib/time-zone";
 
 // How many days out "expiring soon" starts warning a member — chosen to
 // give enough time to renew without being so early the reminder feels
@@ -48,7 +49,7 @@ async function syncMembershipStatus(membership: Membership, now = new Date()): P
         recipientUserId: current.memberId,
         type: "MEMBERSHIP_EXPIRED",
         title: "Membership expired",
-        message: `Your ${current.planNameSnapshot} membership expired on ${current.endDate.toLocaleDateString()}.`,
+        message: `Your ${current.planNameSnapshot} membership expired on ${current.endDate.toLocaleDateString(undefined, zoned())}.`,
         linkUrl: "/member/membership",
         relatedEntityId: current.id,
       });
@@ -64,7 +65,7 @@ async function syncMembershipStatus(membership: Membership, now = new Date()): P
         recipientUserId: current.memberId,
         type: "MEMBERSHIP_EXPIRING",
         title: "Membership expiring soon",
-        message: `Your ${current.planNameSnapshot} membership expires on ${current.endDate.toLocaleDateString()}.`,
+        message: `Your ${current.planNameSnapshot} membership expires on ${current.endDate.toLocaleDateString(undefined, zoned())}.`,
         linkUrl: "/member/membership",
         relatedEntityId: current.id,
       });

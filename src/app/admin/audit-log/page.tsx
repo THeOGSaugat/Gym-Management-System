@@ -19,19 +19,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { zoned } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
   title: "Audit log",
 };
 
 function formatWhen(date: Date) {
-  return date.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return date.toLocaleString(
+    undefined,
+    zoned({
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }),
+  );
 }
 
 /**

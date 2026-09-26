@@ -10,13 +10,14 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { CheckInPanel } from "@/components/attendance/check-in-panel";
 import { checkInAction, checkOutAction } from "./actions";
 import { parsePageParam } from "@/lib/pagination";
+import { zoned } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
   title: "Attendance",
 };
 
 function formatTime(date: Date): string {
-  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return date.toLocaleTimeString([], zoned({ hour: "numeric", minute: "2-digit" }));
 }
 
 export default async function MyAttendancePage({
@@ -89,12 +90,12 @@ export default async function MyAttendancePage({
               >
                 <div className="flex min-w-0 flex-col">
                   <span className="text-sm font-medium">
-                    {record.attendanceDate.toLocaleDateString(undefined, {
+                    {record.attendanceDate.toLocaleDateString(undefined, zoned({
                       weekday: "short",
                       day: "numeric",
                       month: "short",
                       year: "numeric",
-                    })}
+                    }))}
                   </span>
                   <span className="text-[0.8125rem] text-muted-foreground tabular-nums">
                     {formatTime(record.checkInAt)}

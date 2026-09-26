@@ -6,6 +6,7 @@ import { handlePageError } from "@/lib/service-error";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { zoned } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
   title: "Workout plan",
@@ -32,8 +33,8 @@ export default async function MyWorkoutPlanDetailPage({
         badge={<StatusBadge kind="plan" status={plan.status} />}
         description={
           <>
-            {plan.startDate.toLocaleDateString()}
-            {plan.endDate ? ` – ${plan.endDate.toLocaleDateString()}` : ""}
+            {plan.startDate.toLocaleDateString(undefined, zoned())}
+            {plan.endDate ? ` – ${plan.endDate.toLocaleDateString(undefined, zoned())}` : ""}
             {plan.description ? ` · ${plan.description}` : ""}
           </>
         }

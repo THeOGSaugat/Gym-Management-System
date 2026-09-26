@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { prismaMock } from "@/test/prisma-mock";
-import { checkRateLimit, sweepExpiredRateLimits } from "./rate-limit";
+import {
+  checkRateLimit,
+  clearRateLimit,
+  refundRateLimitAttempt,
+  sweepExpiredRateLimits,
+} from "./rate-limit";
 
 // The SQL itself (atomic upsert, window reset, concurrency) was verified
 // against Postgres directly; these pin down how its result is interpreted.
@@ -24,7 +29,10 @@ describe("checkRateLimit (database-backed)", () => {
     prismaMock.$queryRaw.mockResolvedValue([{ count: 1, resetAt: new Date() }]);
     const hostile = `login:x'); DROP TABLE users; --`;
     await checkRateLimit(hostile, 5, 60_000);
-    const [strings, ...values] = prismaMock.$queryRaw.mock.calls[0] as unknown as [TemplateStringsArray, ...unknown[]];
+    const [strings, ...values] = prismaMock.$queryRaw.mock.calls[0] as unknown as [
+      TemplateStringsArray,
+      ...unknown[],
+    ];
     expect(strings.join("")).not.toContain("DROP TABLE");
     expect(values).toContain(hostile);
   });
@@ -45,5 +53,24 @@ describe("checkRateLimit (database-backed)", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("refunds an attempt with a bound parameter, never below zero", async () => {
+    const hostile = `login-client:1.2.3.4'; DELETE FROM users; --`;
+    await refundRateLimitAttempt(hostile);
+    const [strings, ...values] = prismaMock.$executeRaw.mock.calls[0] as unknown as [
+      TemplateStringsArray,
+      ...unknown[],
+    ];
+    expect(strings.join("")).toContain("GREATEST");
+    expect(strings.join("")).not.toContain("DELETE");
+    expect(values).toEqual([hostile]);
+  });
+
+  it("clears one key only", async () => {
+    await clearRateLimit("login:a@gym.test");
+    expect(prismaMock.rateLimitBucket.deleteMany).toHaveBeenCalledWith({
+      where: { key: "login:a@gym.test" },
+    });
   });
 });

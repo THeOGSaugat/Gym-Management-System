@@ -13,13 +13,14 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { ListCard } from "@/components/ui/list-card";
 import { Section } from "@/components/ui/section";
+import { zoned } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
   title: "Dashboard",
 };
 
 function formatTime(date: Date): string {
-  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return date.toLocaleTimeString([], zoned({ hour: "numeric", minute: "2-digit" }));
 }
 
 export default async function TrainerDashboardPage() {
@@ -102,7 +103,7 @@ export default async function TrainerDashboardPage() {
                     avatarName={assignment.member.fullName}
                     title={assignment.member.fullName}
                     subtitle="Create a plan"
-                    meta={`Assigned since ${assignment.startDate.toLocaleDateString()}`}
+                    meta={`Assigned since ${assignment.startDate.toLocaleDateString(undefined, zoned())}`}
                   />
                 </li>
               ))}
@@ -169,7 +170,7 @@ export default async function TrainerDashboardPage() {
                           </span>
                           <span className="truncate text-[0.8125rem] text-muted-foreground">
                             {metricLabel(entry.metric, entry.customLabel)} ·{" "}
-                            {entry.recordedAt.toLocaleDateString()}
+                            {entry.recordedAt.toLocaleDateString(undefined, zoned())}
                           </span>
                         </span>
                         <span className="shrink-0 text-sm font-semibold tabular-nums">

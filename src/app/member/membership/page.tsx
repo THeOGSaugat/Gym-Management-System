@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Section, DetailGrid, DetailItem } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { cn } from "cn";
+import { zoned } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
   title: "Membership",
@@ -99,9 +100,9 @@ export default async function MyMembershipPage() {
 
             <DetailGrid>
               <DetailItem label="Starts">
-                {mostRecent.startDate.toLocaleDateString()}
+                {mostRecent.startDate.toLocaleDateString(undefined, zoned())}
               </DetailItem>
-              <DetailItem label="Ends">{mostRecent.endDate.toLocaleDateString()}</DetailItem>
+              <DetailItem label="Ends">{mostRecent.endDate.toLocaleDateString(undefined, zoned())}</DetailItem>
               <DetailItem label="Price">
                 {formatMinorUnits(mostRecent.priceMinorSnapshot, mostRecent.currencySnapshot)}
               </DetailItem>
@@ -145,8 +146,8 @@ export default async function MyMembershipPage() {
                     {membership.planNameSnapshot}
                   </span>
                   <span className="text-[0.8125rem] text-muted-foreground">
-                    {membership.startDate.toLocaleDateString()} –{" "}
-                    {membership.endDate.toLocaleDateString()} ·{" "}
+                    {membership.startDate.toLocaleDateString(undefined, zoned())} –{" "}
+                    {membership.endDate.toLocaleDateString(undefined, zoned())} ·{" "}
                     {formatMinorUnits(
                       membership.priceMinorSnapshot,
                       membership.currencySnapshot,

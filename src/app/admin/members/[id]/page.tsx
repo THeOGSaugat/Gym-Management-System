@@ -39,6 +39,7 @@ import { AssignTrainerForm } from "@/components/trainers/assign-trainer-form";
 import { updateMemberAction, setMemberStatusAction } from "../actions";
 import { assignTrainerAction, removeAssignmentAction } from "./assignment/actions";
 import { cn } from "cn";
+import { zoned } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
   title: "Member",
@@ -148,7 +149,7 @@ export default async function MemberDetailPage({
         description={
           <>
             Member #{member.memberProfile?.memberNumber ?? "—"} · Joined{" "}
-            {(member.memberProfile?.joinDate ?? member.createdAt).toLocaleDateString()}
+            {(member.memberProfile?.joinDate ?? member.createdAt).toLocaleDateString(undefined, zoned())}
           </>
         }
         actions={
@@ -236,8 +237,8 @@ export default async function MemberDetailPage({
                       />
                     </div>
                     <p className="text-[0.8125rem] text-muted-foreground">
-                      {latestMembership.startDate.toLocaleDateString()} –{" "}
-                      {latestMembership.endDate.toLocaleDateString()}
+                      {latestMembership.startDate.toLocaleDateString(undefined, zoned())} –{" "}
+                      {latestMembership.endDate.toLocaleDateString(undefined, zoned())}
                     </p>
                   </>
                 ) : (
@@ -267,7 +268,7 @@ export default async function MemberDetailPage({
                       {assignmentInfo.current.trainer.fullName}
                     </Link>
                     <p className="text-[0.8125rem] text-muted-foreground">
-                      Since {assignmentInfo.current.startDate.toLocaleDateString()}
+                      Since {assignmentInfo.current.startDate.toLocaleDateString(undefined, zoned())}
                     </p>
                   </>
                 ) : (
@@ -340,7 +341,7 @@ export default async function MemberDetailPage({
                 </DetailItem>
                 <DetailItem label="Date of birth">
                   {member.memberProfile?.dateOfBirth
-                    ? member.memberProfile.dateOfBirth.toLocaleDateString()
+                    ? member.memberProfile.dateOfBirth.toLocaleDateString(undefined, zoned())
                     : <span className="text-muted-foreground">Not on file</span>}
                 </DetailItem>
                 <DetailItem label="Address">
@@ -410,8 +411,8 @@ export default async function MemberDetailPage({
                           {membership.planNameSnapshot}
                         </span>
                         <span className="text-[0.8125rem] text-muted-foreground">
-                          {membership.startDate.toLocaleDateString()} –{" "}
-                          {membership.endDate.toLocaleDateString()} ·{" "}
+                          {membership.startDate.toLocaleDateString(undefined, zoned())} –{" "}
+                          {membership.endDate.toLocaleDateString(undefined, zoned())} ·{" "}
                           {formatMinorUnits(
                             membership.priceMinorSnapshot,
                             membership.currencySnapshot,
@@ -462,7 +463,7 @@ export default async function MemberDetailPage({
                           {formatMinorUnits(payment.amountMinor, payment.currency)}
                         </span>
                         <span className="text-[0.8125rem] text-muted-foreground">
-                          {payment.paidAt.toLocaleDateString()} ·{" "}
+                          {payment.paidAt.toLocaleDateString(undefined, zoned())} ·{" "}
                           {paymentMethodLabel(payment.method)}
                         </span>
                       </span>
@@ -498,7 +499,7 @@ export default async function MemberDetailPage({
                           {assignmentInfo.current.trainer.fullName}
                         </Link>
                         <span className="text-[0.8125rem] text-muted-foreground">
-                          Assigned {assignmentInfo.current.startDate.toLocaleDateString()}
+                          Assigned {assignmentInfo.current.startDate.toLocaleDateString(undefined, zoned())}
                         </span>
                       </div>
                     </div>
@@ -568,8 +569,8 @@ export default async function MemberDetailPage({
                     <span className="flex min-w-0 flex-col gap-0.5">
                       <span className="truncate text-sm font-medium">{plan.name}</span>
                       <span className="text-[0.8125rem] text-muted-foreground">
-                        {plan.startDate.toLocaleDateString()}
-                        {plan.endDate ? ` – ${plan.endDate.toLocaleDateString()}` : ""}
+                        {plan.startDate.toLocaleDateString(undefined, zoned())}
+                        {plan.endDate ? ` – ${plan.endDate.toLocaleDateString(undefined, zoned())}` : ""}
                       </span>
                     </span>
                     <StatusBadge kind="plan" status={plan.status} size="sm" />
@@ -606,7 +607,7 @@ export default async function MemberDetailPage({
                       {metricLabel(log.metric, log.customLabel)}
                     </span>
                     <span className="text-[0.8125rem] text-muted-foreground">
-                      {log.recordedAt.toLocaleDateString()}
+                      {log.recordedAt.toLocaleDateString(undefined, zoned())}
                     </span>
                   </div>
                   <span className="shrink-0 text-sm font-semibold tabular-nums">
@@ -665,7 +666,7 @@ export default async function MemberDetailPage({
                     description="This immediately prevents them from signing in to the member portal."
                     consequences={[
                       "Their memberships, payments, attendance and progress are all kept.",
-                      "Any active session stays valid until it expires (up to 8 hours).",
+                      "If they're signed in right now, they're signed out on their next click.",
                     ]}
                     reversibility="Reversible — you can reactivate the account from this page at any time."
                     confirmLabel="Deactivate member"

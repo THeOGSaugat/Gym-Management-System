@@ -9,6 +9,8 @@
     "lint": "eslint",
     "postinstall": "prisma generate",
     "db:seed": "prisma db seed",
+    "db:create-admin": "tsx prisma/create-admin.ts",
+    "db:migrate:deploy": "prisma migrate deploy",
     "test": "vitest run"
   },
   "dependencies": {

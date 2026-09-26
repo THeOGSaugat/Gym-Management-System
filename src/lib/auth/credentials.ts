@@ -1,7 +1,7 @@
 import { db } from "@/server/db";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { loginSchema } from "@/lib/validations/auth";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { checkRateLimit, clearRateLimit, refundRateLimitAttempt } from "@/lib/rate-limit";
 import type { Role } from "@/generated/prisma/client";
 
 /** Per account: slows guessing one person's password. */
@@ -55,7 +55,11 @@ export async function verifyCredentials(
     );
     if (!perClient.allowed) return null;
   }
-  const perEmail = await checkRateLimit(`login:${email}`, LOGIN_ATTEMPTS_PER_EMAIL, LOGIN_WINDOW_MS);
+  const perEmail = await checkRateLimit(
+    `login:${email}`,
+    LOGIN_ATTEMPTS_PER_EMAIL,
+    LOGIN_WINDOW_MS,
+  );
   if (!perEmail.allowed) return null;
 
   const user = await db.user.findUnique({
@@ -72,6 +76,16 @@ export async function verifyCredentials(
 
   const passwordMatches = await verifyPassword(password, user.passwordHash);
   if (!passwordMatches) return null;
+
+  // A successful login shouldn't count toward the limits — otherwise many
+  // members signing in from the gym's Wi-Fi (one shared IP) would lock each
+  // other out. Attempts are still counted *before* checking the password
+  // (so parallel guesses can't race past the limit); a success hands its
+  // attempt back and wipes that account's failures.
+  await Promise.all([
+    clearRateLimit(`login:${email}`),
+    clientKey ? refundRateLimitAttempt(`login-client:${clientKey}`) : undefined,
+  ]);
 
   return { id: user.id, email: user.email, name: user.fullName, role: user.role };
 }

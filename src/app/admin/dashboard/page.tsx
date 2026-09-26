@@ -20,6 +20,7 @@ import { Section } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { StatusBarChart } from "@/components/dashboard/status-bar-chart";
+import { zoned } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -176,7 +177,7 @@ export default async function AdminDashboardPage() {
                           {payment.member.fullName}
                         </span>
                         <span className="text-[0.8125rem] text-muted-foreground">
-                          {payment.paidAt.toLocaleDateString()}
+                          {payment.paidAt.toLocaleDateString(undefined, zoned())}
                         </span>
                       </span>
                       <span className="flex shrink-0 items-center gap-2">
@@ -236,7 +237,10 @@ export default async function AdminDashboardPage() {
                     <span className="truncate text-sm font-medium">{member.fullName}</span>
                     <span className="truncate text-[0.8125rem] text-muted-foreground">
                       Joined{" "}
-                      {(member.memberProfile?.joinDate ?? member.createdAt).toLocaleDateString()}
+                      {(member.memberProfile?.joinDate ?? member.createdAt).toLocaleDateString(
+                        undefined,
+                        zoned(),
+                      )}
                     </span>
                   </span>
                   <StatusBadge kind="account" status={member.status} size="sm" />

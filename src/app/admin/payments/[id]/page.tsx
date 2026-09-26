@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { DetailGrid, DetailItem } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { zoned } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
   title: "Payment",
@@ -32,11 +33,11 @@ export default async function PaymentDetailPage({
         backLabel="Payments"
         title={formatMinorUnits(payment.amountMinor, payment.currency)}
         badge={<StatusBadge kind="payment" status={payment.status} />}
-        description={`Recorded ${payment.paidAt.toLocaleDateString(undefined, {
+        description={`Recorded ${payment.paidAt.toLocaleDateString(undefined, zoned({
           day: "numeric",
           month: "long",
           year: "numeric",
-        })}`}
+        }))}`}
       />
 
       <Card className="max-w-2xl">

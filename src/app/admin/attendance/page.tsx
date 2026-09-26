@@ -9,13 +9,14 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ListCard } from "@/components/ui/list-card";
+import { zoned } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
   title: "Attendance",
 };
 
 function formatTime(date: Date): string {
-  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return date.toLocaleTimeString([], zoned({ hour: "numeric", minute: "2-digit" }));
 }
 
 export default async function TodayAttendancePage() {
@@ -28,11 +29,14 @@ export default async function TodayAttendancePage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Attendance"
-        description={new Date().toLocaleDateString(undefined, {
-          weekday: "long",
-          day: "numeric",
-          month: "long",
-        })}
+        description={new Date().toLocaleDateString(
+          undefined,
+          zoned({
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+          }),
+        )}
         actions={
           <Button
             variant="outline"

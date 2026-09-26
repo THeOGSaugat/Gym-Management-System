@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "cn";
+import { zoned } from "@/lib/time-zone";
 
 type NotificationRow = {
   id: string;
@@ -57,8 +58,8 @@ function isToday(date: Date): boolean {
 
 function formatTimestamp(date: Date): string {
   return isToday(date)
-    ? date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-    : date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+    ? date.toLocaleTimeString([], zoned({ hour: "numeric", minute: "2-digit" }))
+    : date.toLocaleDateString(undefined, zoned({ day: "numeric", month: "short", year: "numeric" }));
 }
 
 function NotificationItem({

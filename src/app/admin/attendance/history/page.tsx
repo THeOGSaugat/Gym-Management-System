@@ -19,13 +19,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { parsePageParam } from "@/lib/pagination";
+import { zoned } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
   title: "Attendance history",
 };
 
 function formatTime(date: Date): string {
-  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return date.toLocaleTimeString([], zoned({ hour: "numeric", minute: "2-digit" }));
 }
 
 export default async function AttendanceHistoryPage({
@@ -132,7 +133,7 @@ export default async function AttendanceHistoryPage({
                   href={`/admin/members/${record.memberId}`}
                   avatarName={record.member.fullName}
                   title={record.member.fullName}
-                  subtitle={record.attendanceDate.toLocaleDateString()}
+                  subtitle={record.attendanceDate.toLocaleDateString(undefined, zoned())}
                   meta={
                     record.checkOutAt
                       ? `${formatTime(record.checkInAt)} – ${formatTime(record.checkOutAt)}`
@@ -173,7 +174,7 @@ export default async function AttendanceHistoryPage({
                       </Link>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {record.attendanceDate.toLocaleDateString()}
+                      {record.attendanceDate.toLocaleDateString(undefined, zoned())}
                     </TableCell>
                     <TableCell className="text-muted-foreground tabular-nums">
                       {formatTime(record.checkInAt)}

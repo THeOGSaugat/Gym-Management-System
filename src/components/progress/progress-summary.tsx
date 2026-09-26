@@ -1,6 +1,7 @@
 import { METRIC_UNIT, metricLabel } from "@/lib/progress-display";
 import { MetricDelta, MetricSparkline } from "@/components/progress/metric-trend";
 import type { ProgressMetric } from "@/generated/prisma/client";
+import { zoned } from "@/lib/time-zone";
 
 type ProgressEntry = {
   id: string;
@@ -65,7 +66,7 @@ export function ProgressSummary({
               </span>
             </p>
             <p className="text-xs text-muted-foreground">
-              {latest.recordedAt.toLocaleDateString()}
+              {latest.recordedAt.toLocaleDateString(undefined, zoned())}
             </p>
             {previous ? (
               <MetricDelta

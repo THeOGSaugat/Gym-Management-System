@@ -65,6 +65,23 @@ export async function checkRateLimit(
 }
 
 /**
+ * Gives back one attempt previously counted by checkRateLimit — used when
+ * the attempt turned out to be legitimate (a successful login), so shared
+ * keys like a gym's Wi-Fi address only accumulate *failures*. Never goes
+ * below zero, and a no-op if the bucket is gone.
+ */
+export async function refundRateLimitAttempt(key: string): Promise<void> {
+  await db.$executeRaw`
+    UPDATE "rate_limit_buckets" SET "count" = GREATEST("count" - 1, 0) WHERE "key" = ${key}
+  `;
+}
+
+/** Forgets a key's counter entirely — e.g. an account's failures after it logs in. */
+export async function clearRateLimit(key: string): Promise<void> {
+  await db.rateLimitBucket.deleteMany({ where: { key } });
+}
+
+/**
  * Every distinct key (every email anyone ever typed at the login form)
  * leaves a row behind, so expired rows are deleted now and then — on
  * roughly one call in 50, in the background, never delaying the caller.

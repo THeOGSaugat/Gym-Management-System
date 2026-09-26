@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ListCard } from "@/components/ui/list-card";
+import { zoned } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
   title: "My members",
@@ -54,7 +55,7 @@ export default async function TrainerAssignedMembersPage() {
                     ? `Member #${assignment.member.memberProfile.memberNumber}`
                     : undefined
                 }
-                meta={`Assigned since ${assignment.startDate.toLocaleDateString()}`}
+                meta={`Assigned since ${assignment.startDate.toLocaleDateString(undefined, zoned())}`}
                 trailing={
                   activePlanCount.get(assignment.memberId) ? (
                     <Badge variant="success" size="sm">

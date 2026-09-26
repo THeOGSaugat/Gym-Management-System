@@ -15,6 +15,12 @@ vi.mock("@/lib/auth/password", () => ({
 // semantics lets these tests exercise *how verifyCredentials uses it*.
 const buckets = new Map<string, number>();
 vi.mock("@/lib/rate-limit", () => ({
+  clearRateLimit: async (key: string) => {
+    buckets.delete(key);
+  },
+  refundRateLimitAttempt: async (key: string) => {
+    buckets.set(key, Math.max((buckets.get(key) ?? 0) - 1, 0));
+  },
   checkRateLimit: async (key: string, limit: number) => {
     const count = (buckets.get(key) ?? 0) + 1;
     buckets.set(key, count);
@@ -133,6 +139,43 @@ describe("verifyCredentials — login", () => {
 
     await verifyCredentials({ email: uniqueEmail(), password: "Summer2026!" }, client);
     expect(prismaMock.user.findUnique).not.toHaveBeenCalled();
+  });
+});
+
+describe("successful logins don't use up the limits", () => {
+  it("many members logging in from one shared IP (gym Wi-Fi) are never locked out", async () => {
+    const gymWifi = `198.51.100.${++seq}`;
+    verifyPassword.mockResolvedValue(true);
+    for (let i = 0; i < LOGIN_ATTEMPTS_PER_CLIENT * 2; i++) {
+      const email = uniqueEmail();
+      prismaMock.user.findUnique.mockResolvedValue(account({ email }) as never);
+      expect(await verifyCredentials({ email, password: "Member123!" }, gymWifi)).not.toBeNull();
+    }
+  });
+
+  it("the same person can log in repeatedly", async () => {
+    const email = uniqueEmail();
+    prismaMock.user.findUnique.mockResolvedValue(account({ email }) as never);
+    verifyPassword.mockResolvedValue(true);
+    for (let i = 0; i < LOGIN_ATTEMPTS_PER_EMAIL * 2; i++) {
+      expect(await verifyCredentials({ email, password: "Member123!" })).not.toBeNull();
+    }
+  });
+
+  it("failures still count — and a success clears that account's failures", async () => {
+    const email = uniqueEmail();
+    prismaMock.user.findUnique.mockResolvedValue(account({ email }) as never);
+    verifyPassword.mockResolvedValue(false);
+    for (let i = 0; i < LOGIN_ATTEMPTS_PER_EMAIL - 1; i++) {
+      await verifyCredentials({ email, password: "typo" });
+    }
+    verifyPassword.mockResolvedValue(true);
+    expect(await verifyCredentials({ email, password: "Member123!" })).not.toBeNull();
+    // Counter was reset by the success: a fresh run of typos is allowed again.
+    verifyPassword.mockResolvedValue(false);
+    await verifyCredentials({ email, password: "typo" });
+    verifyPassword.mockResolvedValue(true);
+    expect(await verifyCredentials({ email, password: "Member123!" })).not.toBeNull();
   });
 });
 

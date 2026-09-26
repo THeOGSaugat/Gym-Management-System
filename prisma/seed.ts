@@ -116,6 +116,15 @@ const EXERCISES: Array<{ name: string; muscleGroup: string }> = [
 ];
 
 async function main() {
+  // These accounts have publicly documented passwords (see README), so this
+  // script must never touch a production database. Create the first real
+  // admin there with `npm run db:create-admin` instead.
+  if (process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production") {
+    throw new Error(
+      "Refusing to seed demo accounts into a production environment. Use `npm run db:create-admin`.",
+    );
+  }
+
   const coreUserIds: Partial<Record<Role, string>> = {};
 
   for (const seedUser of CORE_USERS) {

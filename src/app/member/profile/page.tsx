@@ -8,6 +8,7 @@ import { DetailGrid, DetailItem } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { SelfProfileForm } from "@/components/members/self-profile-form";
 import { updateOwnProfileAction } from "./actions";
+import { zoned } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
   title: "Profile",
@@ -29,7 +30,10 @@ export default async function MemberProfilePage() {
         description={
           <>
             Member #{member.memberProfile?.memberNumber ?? "—"} · Joined{" "}
-            {(member.memberProfile?.joinDate ?? member.createdAt).toLocaleDateString()}
+            {(member.memberProfile?.joinDate ?? member.createdAt).toLocaleDateString(
+              undefined,
+              zoned(),
+            )}
           </>
         }
       />
@@ -43,7 +47,7 @@ export default async function MemberProfilePage() {
             <DetailItem label="Email">{member.email}</DetailItem>
             <DetailItem label="Date of birth">
               {member.memberProfile?.dateOfBirth
-                ? member.memberProfile.dateOfBirth.toLocaleDateString()
+                ? member.memberProfile.dateOfBirth.toLocaleDateString(undefined, zoned())
                 : "Not on file"}
             </DetailItem>
           </DetailGrid>

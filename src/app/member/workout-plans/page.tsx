@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ListCard } from "@/components/ui/list-card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { zoned } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
   title: "Workout plans",
@@ -45,8 +46,8 @@ export default async function MyWorkoutPlansPage() {
                     title={plan.name}
                     subtitle={
                       plan.endDate
-                        ? `${plan.startDate.toLocaleDateString()} – ${plan.endDate.toLocaleDateString()}`
-                        : `Started ${plan.startDate.toLocaleDateString()}`
+                        ? `${plan.startDate.toLocaleDateString(undefined, zoned())} – ${plan.endDate.toLocaleDateString(undefined, zoned())}`
+                        : `Started ${plan.startDate.toLocaleDateString(undefined, zoned())}`
                     }
                     trailing={<StatusBadge kind="plan" status={plan.status} size="sm" />}
                   />
@@ -67,8 +68,8 @@ export default async function MyWorkoutPlansPage() {
                       title={plan.name}
                       subtitle={
                         plan.endDate
-                          ? `${plan.startDate.toLocaleDateString()} – ${plan.endDate.toLocaleDateString()}`
-                          : `Started ${plan.startDate.toLocaleDateString()}`
+                          ? `${plan.startDate.toLocaleDateString(undefined, zoned())} – ${plan.endDate.toLocaleDateString(undefined, zoned())}`
+                          : `Started ${plan.startDate.toLocaleDateString(undefined, zoned())}`
                       }
                       trailing={<StatusBadge kind="plan" status={plan.status} size="sm" />}
                     />

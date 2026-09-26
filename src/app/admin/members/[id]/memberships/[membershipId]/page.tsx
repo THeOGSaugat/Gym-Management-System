@@ -17,6 +17,7 @@ import { DetailGrid, DetailItem, Section } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Textarea } from "@/components/ui/textarea";
 import { renewMembershipAction, cancelMembershipAction } from "../actions";
+import { zoned } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
   title: "Membership",
@@ -51,7 +52,7 @@ export default async function MembershipDetailPage({
         backLabel="Back to member"
         title={membership.planNameSnapshot}
         badge={<StatusBadge kind="membership" status={membership.status} />}
-        description={`${membership.startDate.toLocaleDateString()} – ${membership.endDate.toLocaleDateString()}`}
+        description={`${membership.startDate.toLocaleDateString(undefined, zoned())} – ${membership.endDate.toLocaleDateString(undefined, zoned())}`}
       />
 
       {query.error ? <ActionFeedback tone="error">{query.error}</ActionFeedback> : null}
@@ -61,16 +62,16 @@ export default async function MembershipDetailPage({
         <CardContent>
           <DetailGrid>
             <DetailItem label="Start date">
-              {membership.startDate.toLocaleDateString()}
+              {membership.startDate.toLocaleDateString(undefined, zoned())}
             </DetailItem>
-            <DetailItem label="End date">{membership.endDate.toLocaleDateString()}</DetailItem>
+            <DetailItem label="End date">{membership.endDate.toLocaleDateString(undefined, zoned())}</DetailItem>
             <DetailItem label="Price paid">
               {formatMinorUnits(membership.priceMinorSnapshot, membership.currencySnapshot)}
             </DetailItem>
             <DetailItem label="Duration">{durationDays} days</DetailItem>
             {membership.status === "CANCELLED" ? (
               <DetailItem label="Cancelled" className="sm:col-span-2">
-                {membership.cancelledAt?.toLocaleDateString()}
+                {membership.cancelledAt?.toLocaleDateString(undefined, zoned())}
                 {membership.cancelReason ? ` — ${membership.cancelReason}` : ""}
               </DetailItem>
             ) : null}
@@ -162,7 +163,7 @@ export default async function MembershipDetailPage({
                       {formatMinorUnits(payment.amountMinor, payment.currency)}
                     </span>
                     <span className="text-[0.8125rem] text-muted-foreground">
-                      {payment.paidAt.toLocaleDateString()} ·{" "}
+                      {payment.paidAt.toLocaleDateString(undefined, zoned())} ·{" "}
                       {paymentMethodLabel(payment.method)}
                     </span>
                   </span>

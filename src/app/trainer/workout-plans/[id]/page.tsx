@@ -35,6 +35,7 @@ import {
   addWorkoutExerciseAction,
   removeWorkoutExerciseAction,
 } from "./actions";
+import { zoned } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
   title: "Workout plan",
@@ -78,8 +79,8 @@ export default async function TrainerWorkoutPlanDetailPage({
           <>
             {plan.days.length} day{plan.days.length === 1 ? "" : "s"} · {totalExercises} exercise
             {totalExercises === 1 ? "" : "s"} ·{" "}
-            {plan.startDate.toLocaleDateString()}
-            {plan.endDate ? ` – ${plan.endDate.toLocaleDateString()}` : ""}
+            {plan.startDate.toLocaleDateString(undefined, zoned())}
+            {plan.endDate ? ` – ${plan.endDate.toLocaleDateString(undefined, zoned())}` : ""}
           </>
         }
       />

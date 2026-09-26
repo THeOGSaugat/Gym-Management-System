@@ -24,6 +24,7 @@ import {
 import { paymentMethodValues, paymentStatusValues } from "@/lib/validations/payment";
 import type { PaymentMethod, PaymentStatus } from "@/generated/prisma/client";
 import { parsePageParam } from "@/lib/pagination";
+import { zoned } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
   title: "Payments",
@@ -154,7 +155,7 @@ export default async function PaymentsPage({
                   icon={CreditCard}
                   title={formatMinorUnits(payment.amountMinor, payment.currency)}
                   subtitle={payment.member.fullName}
-                  meta={`${payment.paidAt.toLocaleDateString()} · ${paymentMethodLabel(payment.method)}`}
+                  meta={`${payment.paidAt.toLocaleDateString(undefined, zoned())} · ${paymentMethodLabel(payment.method)}`}
                   trailing={<StatusBadge kind="payment" status={payment.status} size="sm" />}
                 />
               </li>
@@ -180,7 +181,7 @@ export default async function PaymentsPage({
                         href={`/admin/payments/${payment.id}`}
                         className="font-medium hover:text-primary hover:underline"
                       >
-                        {payment.paidAt.toLocaleDateString()}
+                        {payment.paidAt.toLocaleDateString(undefined, zoned())}
                       </Link>
                     </TableCell>
                     <TableCell>

@@ -20,6 +20,7 @@ import { ListCard } from "@/components/ui/list-card";
 import { DetailGrid, DetailItem, Section } from "@/components/ui/section";
 import { SectionTabs } from "@/components/ui/section-tabs";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { zoned } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
   title: "Member",
@@ -28,7 +29,7 @@ export const metadata: Metadata = {
 type Tab = "overview" | "training" | "progress";
 
 function formatTime(date: Date): string {
-  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return date.toLocaleTimeString([], zoned({ hour: "numeric", minute: "2-digit" }));
 }
 
 export default async function TrainerAssignedMemberDetailPage({
@@ -65,7 +66,7 @@ export default async function TrainerAssignedMemberDetailPage({
         description={
           <>
             Member #{member.memberNumber ?? "—"} · Joined{" "}
-            {member.joinDate.toLocaleDateString()}
+            {member.joinDate.toLocaleDateString(undefined, zoned())}
           </>
         }
         actions={
@@ -129,8 +130,8 @@ export default async function TrainerAssignedMemberDetailPage({
                   <div className="flex flex-col gap-0.5">
                     <p className="text-base font-medium">{membershipStatus.current.planName}</p>
                     <p className="text-[0.8125rem] text-muted-foreground">
-                      {membershipStatus.current.startDate.toLocaleDateString()} –{" "}
-                      {membershipStatus.current.endDate.toLocaleDateString()}
+                      {membershipStatus.current.startDate.toLocaleDateString(undefined, zoned())} –{" "}
+                      {membershipStatus.current.endDate.toLocaleDateString(undefined, zoned())}
                     </p>
                   </div>
                   <StatusBadge kind="membership" status={membershipStatus.current.status} />
@@ -160,11 +161,11 @@ export default async function TrainerAssignedMemberDetailPage({
                     className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 shadow-xs"
                   >
                     <span className="text-sm font-medium">
-                      {record.attendanceDate.toLocaleDateString(undefined, {
+                      {record.attendanceDate.toLocaleDateString(undefined, zoned({
                         weekday: "short",
                         day: "numeric",
                         month: "short",
-                      })}
+                      }))}
                     </span>
                     <span className="text-[0.8125rem] text-muted-foreground tabular-nums">
                       {formatTime(record.checkInAt)}
@@ -210,8 +211,8 @@ export default async function TrainerAssignedMemberDetailPage({
                     title={plan.name}
                     subtitle={
                       plan.endDate
-                        ? `${plan.startDate.toLocaleDateString()} – ${plan.endDate.toLocaleDateString()}`
-                        : `Started ${plan.startDate.toLocaleDateString()}`
+                        ? `${plan.startDate.toLocaleDateString(undefined, zoned())} – ${plan.endDate.toLocaleDateString(undefined, zoned())}`
+                        : `Started ${plan.startDate.toLocaleDateString(undefined, zoned())}`
                     }
                     trailing={<StatusBadge kind="plan" status={plan.status} size="sm" />}
                   />
@@ -247,7 +248,7 @@ export default async function TrainerAssignedMemberDetailPage({
                       {metricLabel(log.metric, log.customLabel)}
                     </span>
                     <span className="text-[0.8125rem] text-muted-foreground">
-                      {log.recordedAt.toLocaleDateString()}
+                      {log.recordedAt.toLocaleDateString(undefined, zoned())}
                     </span>
                   </div>
                   <span className="shrink-0 text-sm font-semibold tabular-nums">

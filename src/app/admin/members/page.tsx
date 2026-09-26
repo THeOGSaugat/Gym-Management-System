@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/table";
 import type { UserStatus } from "@/generated/prisma/client";
 import { parsePageParam } from "@/lib/pagination";
+import { zoned } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
   title: "Members",
@@ -143,7 +144,7 @@ export default async function MembersPage({
                   avatarName={member.fullName}
                   title={member.fullName}
                   subtitle={member.email}
-                  meta={`Joined ${(member.memberProfile?.joinDate ?? member.createdAt).toLocaleDateString()}`}
+                  meta={`Joined ${(member.memberProfile?.joinDate ?? member.createdAt).toLocaleDateString(undefined, zoned())}`}
                   trailing={<StatusBadge kind="account" status={member.status} size="sm" />}
                 />
               </li>
@@ -180,7 +181,7 @@ export default async function MembersPage({
                       <StatusBadge kind="account" status={member.status} size="sm" />
                     </TableCell>
                     <TableCell className="px-4 text-muted-foreground">
-                      {(member.memberProfile?.joinDate ?? member.createdAt).toLocaleDateString()}
+                      {(member.memberProfile?.joinDate ?? member.createdAt).toLocaleDateString(undefined, zoned())}
                     </TableCell>
                   </TableRow>
                 ))}

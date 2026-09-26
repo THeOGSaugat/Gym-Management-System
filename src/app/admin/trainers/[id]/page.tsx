@@ -14,6 +14,7 @@ import { SectionTabs } from "@/components/ui/section-tabs";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { TrainerForm } from "@/components/trainers/trainer-form";
 import { updateTrainerAction, setTrainerStatusAction } from "../actions";
+import { zoned } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
   title: "Trainer",
@@ -117,7 +118,7 @@ export default async function TrainerDetailPage({
                       href={`/admin/members/${assignment.memberId}`}
                       avatarName={assignment.member.fullName}
                       title={assignment.member.fullName}
-                      meta={`Assigned since ${assignment.startDate.toLocaleDateString()}`}
+                      meta={`Assigned since ${assignment.startDate.toLocaleDateString(undefined, zoned())}`}
                     />
                   </li>
                 ))}

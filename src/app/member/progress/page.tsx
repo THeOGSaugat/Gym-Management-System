@@ -10,6 +10,7 @@ import { Section } from "@/components/ui/section";
 import { ProgressLogForm } from "@/components/progress/progress-log-form";
 import { ProgressSummary } from "@/components/progress/progress-summary";
 import { recordProgressAction } from "./actions";
+import { zoned } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
   title: "Progress",
@@ -59,11 +60,14 @@ export default async function MyProgressPage() {
                     {metricLabel(log.metric, log.customLabel)}
                   </span>
                   <span className="text-[0.8125rem] text-muted-foreground">
-                    {log.recordedAt.toLocaleDateString(undefined, {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })}
+                    {log.recordedAt.toLocaleDateString(
+                      undefined,
+                      zoned({
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      }),
+                    )}
                   </span>
                   {log.notes ? (
                     <span className="mt-0.5 text-[0.8125rem] leading-relaxed text-muted-foreground">

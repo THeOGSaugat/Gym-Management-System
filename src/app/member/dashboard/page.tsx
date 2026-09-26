@@ -23,17 +23,18 @@ import { MetricDelta } from "@/components/progress/metric-trend";
 import { daysUntil, getMembershipUrgency } from "@/lib/membership-display";
 import { checkInAction, checkOutAction } from "../attendance/actions";
 import { cn } from "cn";
+import { hourInAppTimeZone, zoned } from "@/lib/time-zone";
 
 export const metadata: Metadata = {
   title: "Home",
 };
 
 function formatTime(date: Date): string {
-  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return date.toLocaleTimeString([], zoned({ hour: "numeric", minute: "2-digit" }));
 }
 
 function greeting(): string {
-  const hour = new Date().getHours();
+  const hour = hourInAppTimeZone();
   if (hour < 12) return "Good morning";
   if (hour < 18) return "Good afternoon";
   return "Good evening";
@@ -79,11 +80,11 @@ export default async function MemberDashboardPage() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
         <p className="text-[0.8125rem] font-medium text-muted-foreground">
-          {new Date().toLocaleDateString(undefined, {
+          {new Date().toLocaleDateString(undefined, zoned({
             weekday: "long",
             day: "numeric",
             month: "long",
-          })}
+          }))}
         </p>
         <h1 className="text-2xl leading-tight font-semibold tracking-[-0.02em] sm:text-[1.75rem]">
           {greeting()}
@@ -145,7 +146,7 @@ export default async function MemberDashboardPage() {
                 {membership === null
                   ? "Ask the front desk to set you up with a plan."
                   : urgency === "expiring"
-                    ? `Your ${membership.planName} plan ends on ${membership.endDate.toLocaleDateString()}. Speak to the front desk to renew.`
+                    ? `Your ${membership.planName} plan ends on ${membership.endDate.toLocaleDateString(undefined, zoned())}. Speak to the front desk to renew.`
                     : "Speak to the front desk to renew and keep access to the gym."}
               </p>
             </div>
@@ -183,9 +184,9 @@ export default async function MemberDashboardPage() {
                     />
                   </div>
                   <p className="text-[0.8125rem] text-muted-foreground">
-                    Started {data.currentWorkoutPlan.startDate.toLocaleDateString()}
+                    Started {data.currentWorkoutPlan.startDate.toLocaleDateString(undefined, zoned())}
                     {data.currentWorkoutPlan.endDate
-                      ? ` · ends ${data.currentWorkoutPlan.endDate.toLocaleDateString()}`
+                      ? ` · ends ${data.currentWorkoutPlan.endDate.toLocaleDateString(undefined, zoned())}`
                       : ""}
                   </p>
                   <Button
@@ -236,11 +237,11 @@ export default async function MemberDashboardPage() {
                   >
                     <div className="flex min-w-0 flex-col">
                       <span className="text-sm font-medium">
-                        {record.attendanceDate.toLocaleDateString(undefined, {
+                        {record.attendanceDate.toLocaleDateString(undefined, zoned({
                           weekday: "short",
                           day: "numeric",
                           month: "short",
-                        })}
+                        }))}
                       </span>
                       <span className="text-[0.8125rem] text-muted-foreground">
                         {formatTime(record.checkInAt)}
@@ -273,8 +274,8 @@ export default async function MemberDashboardPage() {
                   </div>
                   <p className="text-[0.8125rem] text-muted-foreground">
                     {membership.isCurrentlyActive && daysLeft !== null && daysLeft >= 0
-                      ? `${daysLeft} day${daysLeft === 1 ? "" : "s"} left · renews ${membership.endDate.toLocaleDateString()}`
-                      : `Valid ${membership.startDate.toLocaleDateString()} – ${membership.endDate.toLocaleDateString()}`}
+                      ? `${daysLeft} day${daysLeft === 1 ? "" : "s"} left · renews ${membership.endDate.toLocaleDateString(undefined, zoned())}`
+                      : `Valid ${membership.startDate.toLocaleDateString(undefined, zoned())} – ${membership.endDate.toLocaleDateString(undefined, zoned())}`}
                   </p>
                   <Button
                     variant="outline"
@@ -319,7 +320,7 @@ export default async function MemberDashboardPage() {
                   </div>
                   <p className="text-[0.8125rem] text-muted-foreground">
                     {metricLabel(latestProgress.metric, latestProgress.customLabel)} · logged{" "}
-                    {latestProgress.recordedAt.toLocaleDateString()}
+                    {latestProgress.recordedAt.toLocaleDateString(undefined, zoned())}
                   </p>
                   <Button
                     variant="outline"
